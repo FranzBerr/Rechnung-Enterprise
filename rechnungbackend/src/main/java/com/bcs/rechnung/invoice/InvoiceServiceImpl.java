@@ -447,6 +447,10 @@ public class InvoiceServiceImpl implements InvoiceService {
             product.getProductNumber()
         );
 
+        item.setProductName(
+            product.getName()
+        );
+
         item.setDescription(
             resolveDescription(
                 request.description(),

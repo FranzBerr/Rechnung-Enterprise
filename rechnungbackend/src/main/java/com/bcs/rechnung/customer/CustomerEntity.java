@@ -46,6 +46,10 @@ public class CustomerEntity {
     )
     private String name;
 
+    /**
+     * Ansprechpartner beim Kunden
+     */
+
     @Column(
         name = "contact_person",
         length = 200
@@ -88,6 +92,68 @@ public class CustomerEntity {
         length = 50
     )
     private String vatId;
+
+    /**
+     * Leitweg-ID der Behörde
+     * z.B. 991-01484-64
+     */
+    @Column(
+        name = "leitweg_id",
+        length = 100
+    )
+    private String leitwegId;
+
+    /**
+     * Elektronische Adresse für XRechnung
+     * z.B. E-Mail oder Peppol-ID
+     */
+    @Column(
+        name = "electronic_address",
+        length = 255
+    )
+    private String electronicAddress;
+
+    /**
+     * Schema der elektronischen Adresse
+     * Beispiele:
+     * EM   = E-Mail
+     * 0204 = Leitweg-ID
+     * 0088 = GLN
+     */
+    @Column(
+        name = "electronic_address_scheme",
+        length = 20
+    )
+    private String electronicAddressScheme;
+
+    @Column(
+        name = "buyer_reference",
+        length = 100
+    )
+    private String buyerReference;
+
+    /**
+     * z.B.
+     * urn:fdc:peppol.eu:2017:poacc:billing:01:1.0
+     */
+    @Column(
+        name = "business_process_id",
+        length = 255
+    )
+    private String businessProcessId;
+
+    /**
+     * Ansprechpartner beim Kunden
+     */
+
+    /**
+     * Abteilung
+     */
+    @Column(
+        name = "department",
+        length = 200
+    )
+    private String department;
 
     @Column(
         nullable = false

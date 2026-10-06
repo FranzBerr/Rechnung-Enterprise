@@ -37,6 +37,7 @@ public class InvoiceEntity {
 
     @Column(
         name = "invoice_number",
+        nullable = false,
         length = 30,
         unique = true
     )
@@ -65,7 +66,8 @@ public class InvoiceEntity {
         nullable = false,
         length = 30
     )
-    private InvoiceStatus status = InvoiceStatus.DRAFT;
+    private InvoiceStatus status =
+        InvoiceStatus.DRAFT;
 
     @ManyToOne(
         fetch = FetchType.LAZY,
@@ -96,6 +98,10 @@ public class InvoiceEntity {
         nullable = false
     )
     private BankAccountEntity bankAccount;
+
+    /*
+     * Snapshot Kundendaten
+     */
 
     @Column(
         name = "customer_number",
@@ -141,6 +147,10 @@ public class InvoiceEntity {
     )
     private String customerVatId;
 
+    /*
+     * Snapshot Bankdaten
+     */
+
     @Column(
         name = "bank_name",
         nullable = false,
@@ -162,6 +172,10 @@ public class InvoiceEntity {
     )
     private String bic;
 
+    /*
+     * Zahlungsbedingungen
+     */
+
     @Column(
         name = "payment_term_days",
         nullable = false
@@ -174,7 +188,8 @@ public class InvoiceEntity {
         precision = 7,
         scale = 4
     )
-    private BigDecimal discountPercent = BigDecimal.ZERO;
+    private BigDecimal discountPercent =
+        BigDecimal.ZERO;
 
     @Column(
         name = "discount_days",
@@ -182,13 +197,18 @@ public class InvoiceEntity {
     )
     private Integer discountDays = 0;
 
+    /*
+     * Summen
+     */
+
     @Column(
         name = "subtotal_net",
         nullable = false,
         precision = 19,
         scale = 2
     )
-    private BigDecimal subtotalNet = BigDecimal.ZERO;
+    private BigDecimal subtotalNet =
+        BigDecimal.ZERO;
 
     @Column(
         name = "tax_amount",
@@ -196,7 +216,8 @@ public class InvoiceEntity {
         precision = 19,
         scale = 2
     )
-    private BigDecimal taxAmount = BigDecimal.ZERO;
+    private BigDecimal taxAmount =
+        BigDecimal.ZERO;
 
     @Column(
         name = "total_gross",
@@ -204,7 +225,164 @@ public class InvoiceEntity {
         precision = 19,
         scale = 2
     )
-    private BigDecimal totalGross = BigDecimal.ZERO;
+    private BigDecimal totalGross =
+        BigDecimal.ZERO;
+
+    /*
+     * XRechnung / ZUGFeRD
+     */
+
+    @Column(
+        name = "buyer_reference",
+        length = 100
+    )
+    private String buyerReference;
+
+    @Column(
+        name = "order_reference",
+        length = 100
+    )
+    private String orderReference;
+
+    @Column(
+        name = "contract_reference",
+        length = 100
+    )
+    private String contractReference;
+
+    @Column(
+        name = "project_reference",
+        length = 100
+    )
+    private String projectReference;
+
+    @Column(
+        name = "delivery_note_reference",
+        length = 100
+    )
+    private String deliveryNoteReference;
+
+    @Column(
+        name = "customer_electronic_address",
+        length = 255
+    )
+    private String customerElectronicAddress;
+
+    @Column(
+        name = "customer_electronic_address_scheme",
+        length = 20
+    )
+    private String customerElectronicAddressScheme;
+
+    /**
+     * 380 = Rechnung
+     * 381 = Gutschrift
+     * 384 = Korrekturrechnung
+     */
+    @Column(
+        name = "invoice_type_code",
+        nullable = false,
+        length = 10
+    )
+    private String invoiceTypeCode = "380";
+
+    /**
+     * 58 = SEPA Überweisung
+     */
+    @Column(
+        name = "payment_means_code",
+        nullable = false,
+        length = 10
+    )
+    private String paymentMeansCode = "58";
+
+    /**
+     * S = Standard VAT
+     * Z = Steuerfrei
+     * E = Exempt
+     */
+    @Column(
+        name = "tax_category_code",
+        nullable = false,
+        length = 10
+    )
+    private String taxCategoryCode = "S";
+
+    /**
+     * ISO 4217
+     */
+    @Column(
+        name = "currency_code",
+        nullable = false,
+        length = 3
+    )
+    private String currencyCode = "EUR";
+
+    /**
+     * Steuerpunkt
+     */
+    @Column(
+        name = "tax_point_date"
+    )
+    private LocalDate taxPointDate;
+
+    /**
+     * Zahlungsreferenz
+     */
+    @Column(
+        name = "payment_reference",
+        length = 100
+    )
+    private String paymentReference;
+
+    /**
+     * Verkäuferreferenz
+     */
+    @Column(
+        name = "seller_reference",
+        length = 100
+    )
+    private String sellerReference;
+
+    /**
+     * Business Process Identifier
+     */
+    @Column(
+        name = "business_process_id",
+        length = 200
+    )
+    private String businessProcessId =
+        "urn:fdc:peppol.eu:2017:poacc:billing:01:1.0";
+
+    /**
+     * EN16931 / XRechnung Kennung
+     */
+    @Column(
+        name = "specification_identifier",
+        length = 300
+    )
+    private String specificationIdentifier =
+        "urn:xeinkauf.de:kosit:xrechnung_3.0";
+
+    /**
+     * Leitweg-ID Snapshot
+     */
+    @Column(
+        name = "customer_leitweg_id",
+        length = 100
+    )
+    private String customerLeitwegId;
+
+//    @Column(
+//        name = "product_name",
+//        nullable = false,
+//        length = 200
+//    )
+//    private String productName;
+
+    /*
+     * Sonstiges
+     */
 
     @Column(
         name = "notes",
@@ -219,9 +397,13 @@ public class InvoiceEntity {
         fetch = FetchType.LAZY
     )
     @OrderBy("positionNumber ASC")
-    private List<InvoiceItemEntity> items = new ArrayList<>();
+    private List<InvoiceItemEntity> items =
+        new ArrayList<>();
 
-    public void addItem(InvoiceItemEntity item) {
+    public void addItem(
+        InvoiceItemEntity item
+    ) {
+
         if (item == null) {
             return;
         }
@@ -230,7 +412,10 @@ public class InvoiceEntity {
         items.add(item);
     }
 
-    public void removeItem(InvoiceItemEntity item) {
+    public void removeItem(
+        InvoiceItemEntity item
+    ) {
+
         if (item == null) {
             return;
         }
@@ -239,7 +424,10 @@ public class InvoiceEntity {
         item.setInvoice(null);
     }
 
-    public void replaceItems(List<InvoiceItemEntity> newItems) {
+    public void replaceItems(
+        List<InvoiceItemEntity> newItems
+    ) {
+
         for (InvoiceItemEntity existingItem : items) {
             existingItem.setInvoice(null);
         }

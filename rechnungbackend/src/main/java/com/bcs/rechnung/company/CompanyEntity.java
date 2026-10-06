@@ -68,6 +68,12 @@ public class CompanyEntity {
     private String country;
 
     @Column(
+        name = "contact_person",
+        length = 200
+    )
+    private String contactPerson;
+
+    @Column(
         name = "phone",
         length = 100
     )

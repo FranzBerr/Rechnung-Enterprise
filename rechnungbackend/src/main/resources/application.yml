@@ -1,17 +1,18 @@
 spring:
+  application:
+    name: RechnungBackend
+
   datasource:
-    url: ${RECHNUNG_DB_URL:jdbc:sqlserver://localhost:1433;databaseName=Firma;encrypt=true;trustServerCertificate=true}
-#    :jdbc:sqlserver://localhost:1433;databaseName=Firma;encrypt=true;trustServerCertificate=true}
+    url: jdbc:sqlserver://localhost:1433;databaseName=Firma;encrypt=true;trustServerCertificate=true
     username: sa
-#    ${RECHNUNG_DB_USER}
     password: ffbberr$1
-#    ${RECHNUNG_DB_PASSWORD}
+
   jpa:
     open-in-view: false
+
     hibernate:
       ddl-auto: update
-#  flyway:
-#    enabled: true
+
 server:
   port: 8080
 
@@ -26,6 +27,5 @@ springdoc:
     tags-sorter: alpha
     try-it-out-enabled: true
 
-#application:
-#  company-name: ${RECHNUNG_COMPANY_NAME}
-#  base-url: ${RECHNUNG_BASE_URL}
+xrechnung:
+  output-directory: 'C:\PolyRackDummy\Rechning gesamt\Rechnung-Enterprise-formatiert\Rechnung-Enterprise\xrechnung'
