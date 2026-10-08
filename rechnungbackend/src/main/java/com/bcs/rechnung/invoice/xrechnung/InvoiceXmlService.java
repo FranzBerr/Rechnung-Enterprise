@@ -2,7 +2,8 @@ package com.bcs.rechnung.invoice.xrechnung;
 
 public interface InvoiceXmlService {
 
-    byte[] generateXml(
+    GeneratedXRechnung generateXml(
         Long invoiceId
     );
+//    String getInvoiceNumber(Long invoiceId);
 }

@@ -12,16 +12,17 @@ import java.io.IOException;
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
-public class InvoicePdfServiceImpl
-    implements InvoicePdfService {
+public class InvoicePdfServiceImpl implements InvoicePdfService {
 
     private final InvoiceRepository invoiceRepository;
     private final InvoicePdfGenerator invoicePdfGenerator;
 
     @Override
-    public byte[] generateInvoicePdf(
+    public GeneratedInvoicePdf generateInvoicePdf(
         Long invoiceId
     ) {
+
+        validateId(invoiceId);
 
         InvoiceEntity invoice =
             invoiceRepository.findById(invoiceId)
@@ -33,8 +34,14 @@ public class InvoicePdfServiceImpl
 
         try {
 
-            return invoicePdfGenerator.generate(
-                invoice
+            byte[] pdf =
+                invoicePdfGenerator.generate(
+                    invoice
+                );
+
+            return new GeneratedInvoicePdf(
+                invoice.getInvoiceNumber(),
+                pdf
             );
 
         } catch (IOException e) {

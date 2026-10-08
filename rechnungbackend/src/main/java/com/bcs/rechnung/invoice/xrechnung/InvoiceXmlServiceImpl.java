@@ -28,21 +28,74 @@ public class InvoiceXmlServiceImpl implements InvoiceXmlService {
     private final InvoiceXmlGenerator invoiceXmlGenerator;
 
     @Override
-    public byte[] generateXml(Long invoiceId) {
+    public GeneratedXRechnung generateXml(
+        Long invoiceId
+    ) {
         validateInvoiceId(invoiceId);
 
-        InvoiceEntity invoice = invoiceRepository.findById(invoiceId)
-            .orElseThrow(() -> new ResourceNotFoundException(
-                "Rechnung mit ID " + invoiceId + " wurde nicht gefunden."
-            ));
+        InvoiceEntity invoice =
+            invoiceRepository.findById(invoiceId)
+                .orElseThrow(() ->
+                    new ResourceNotFoundException(
+                        "Rechnung mit ID "
+                            + invoiceId
+                            + " wurde nicht gefunden."
+                    )
+                );
 
         validateInvoice(invoice);
 
-        XRechnungDto xRechnung = mapInvoice(invoice);
+        String invoiceNumber =
+            normalize(invoice.getInvoiceNumber());
 
-        return invoiceXmlGenerator.generate(xRechnung);
+        if (invoiceNumber == null) {
+            throw new IllegalStateException(
+                "Die Rechnungsnummer fehlt für die Rechnung mit ID "
+                    + invoiceId
+                    + "."
+            );
+        }
+
+        XRechnungDto xRechnung =
+            mapInvoice(invoice);
+
+        byte[] xml =
+            invoiceXmlGenerator.generate(xRechnung);
+
+        return new GeneratedXRechnung(
+            invoiceNumber,
+            xml
+        );
     }
-
+//    @Override
+//    public String getInvoiceNumber(
+//        Long invoiceId
+//    ) {
+//        validateInvoiceId(invoiceId);
+//
+//        InvoiceEntity invoice =
+//            invoiceRepository.findById(invoiceId)
+//                .orElseThrow(() ->
+//                    new ResourceNotFoundException(
+//                        "Rechnung mit ID "
+//                            + invoiceId
+//                            + " wurde nicht gefunden."
+//                    )
+//                );
+//
+//        String invoiceNumber =
+//            normalize(invoice.getInvoiceNumber());
+//
+//        if (invoiceNumber == null) {
+//            throw new IllegalStateException(
+//                "Die Rechnungsnummer fehlt für die Rechnung mit ID "
+//                    + invoiceId
+//                    + "."
+//            );
+//        }
+//
+//        return invoiceNumber;
+//    }
     private XRechnungDto mapInvoice(InvoiceEntity invoice) {
         XRechnungDto dto = new XRechnungDto();
 
@@ -244,25 +297,25 @@ public class InvoiceXmlServiceImpl implements InvoiceXmlService {
             ? null
             : normalized;
     }
-    private String firstLine(
-        String text
-    ) {
-        if (text == null || text.isBlank()) {
-            return null;
-        }
-
-        String normalized =
-            text.replace("\r\n", "\n")
-                .replace('\r', '\n');
-
-        int pos = normalized.indexOf('\n');
-
-        if (pos < 0) {
-            return normalized.trim();
-        }
-
-        return normalized.substring(0, pos).trim();
-    }
+//    private String firstLine(
+//        String text
+//    ) {
+//        if (text == null || text.isBlank()) {
+//            return null;
+//        }
+//
+//        String normalized =
+//            text.replace("\r\n", "\n")
+//                .replace('\r', '\n');
+//
+//        int pos = normalized.indexOf('\n');
+//
+//        if (pos < 0) {
+//            return normalized.trim();
+//        }
+//
+//        return normalized.substring(0, pos).trim();
+//    }
     private void validateInvoice(InvoiceEntity invoice) {
         requireText(invoice.getInvoiceNumber(), "Rechnungsnummer");
         requireNotNull(invoice.getInvoiceDate(), "Rechnungsdatum");
@@ -451,4 +504,6 @@ public class InvoiceXmlServiceImpl implements InvoiceXmlService {
     private BigDecimal zeroIfNull(BigDecimal value) {
         return value == null ? BigDecimal.ZERO : value;
     }
+
+
 }

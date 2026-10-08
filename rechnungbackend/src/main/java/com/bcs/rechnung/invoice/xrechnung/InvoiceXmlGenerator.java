@@ -208,10 +208,6 @@ public class InvoiceXmlGenerator {
             );
             writer.writeEndElement();
 
-//            startRam(writer, "SpecifiedTradeProduct");
-//            optionalElementRam(writer, "SellerAssignedID", item.getProductNumber());
-//            elementRam(writer, "Name", item.getDescription());
-//            writer.writeEndElement();
             startRam(writer, "SpecifiedTradeProduct");
 
             optionalElementRam(
@@ -270,7 +266,8 @@ public class InvoiceXmlGenerator {
                 writer,
                 "LineTotalAmount",
                 item.getLineNet(),
-                invoice.getCurrencyCode()
+                null
+//                invoice.getCurrencyCode()
             );
             writer.writeEndElement();
 

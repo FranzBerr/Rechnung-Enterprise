@@ -29,3 +29,7 @@ springdoc:
 
 xrechnung:
   output-directory: 'C:\PolyRackDummy\Rechning gesamt\Rechnung-Enterprise-formatiert\Rechnung-Enterprise\xrechnung'
+
+pdf:
+  output-directory: 'C:\PolyRackDummy\Rechning gesamt\Rechnung-Enterprise-formatiert\Rechnung-Enterprise\pdf'
+

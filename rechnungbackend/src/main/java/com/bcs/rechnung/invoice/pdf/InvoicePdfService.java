@@ -2,7 +2,7 @@ package com.bcs.rechnung.invoice.pdf;
 
 public interface InvoicePdfService {
 
-    byte[] generateInvoicePdf(
+    GeneratedInvoicePdf generateInvoicePdf(
         Long invoiceId
     );
 }
