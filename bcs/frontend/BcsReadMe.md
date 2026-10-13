@@ -1,6 +1,6 @@
 
 ```Bash
-rrechnungfrontend
+rechnungfrontend
 │
 ├── public
 │   ├── favicon.ico

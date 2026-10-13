@@ -1,12 +1,13 @@
 export interface Company {
-
   id: number;
 
-  companyName: string;
+  name: string;
+
+  legalForm?: string;
 
   street: string;
 
-  postalCode: string;
+  zipCode: string;
 
   city: string;
 
@@ -15,6 +16,14 @@ export interface Company {
   taxNumber: string;
 
   vatId: string;
+
+  phone?: string;
+
+  email?: string;
+
+  website?: string;
+
+  active: boolean;
 }
 
 export interface CompanyRequest {

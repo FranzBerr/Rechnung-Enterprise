@@ -22,6 +22,7 @@ import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -389,6 +390,17 @@ public class InvoiceEntity {
         length = 2000
     )
     private String notes;
+
+    @Column(
+        name = "archived",
+        nullable = false
+    )
+    private Boolean archived = false;
+
+    @Column(
+        name = "archived_at"
+    )
+    private LocalDateTime archivedAt;
 
     @OneToMany(
         mappedBy = "invoice",

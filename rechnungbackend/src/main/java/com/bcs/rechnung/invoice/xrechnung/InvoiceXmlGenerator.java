@@ -27,7 +27,6 @@ import javax.xml.transform.stream.StreamResult;
 import javax.xml.transform.stream.StreamSource;
 import java.io.ByteArrayInputStream;
 
-import static org.apache.commons.lang3.Validate.notBlank;
 
 @Component
 public class InvoiceXmlGenerator {
@@ -52,34 +51,6 @@ public class InvoiceXmlGenerator {
 
     private static final DateTimeFormatter DATE_FORMAT =
         DateTimeFormatter.ofPattern("yyyyMMdd");
-
-//    public byte[] generate(XRechnungDto invoice) {
-//        validate(invoice);
-//
-//        try (ByteArrayOutputStream output = new ByteArrayOutputStream()) {
-//            XMLOutputFactory factory = XMLOutputFactory.newFactory();
-//            XMLStreamWriter writer = factory.createXMLStreamWriter(
-//                output,
-//                StandardCharsets.UTF_8.name()
-//            );
-//
-//            writeDocument(writer, invoice);
-//            writer.flush();
-//            writer.close();
-//
-//            return output.toByteArray();
-//        } catch (XMLStreamException exception) {
-//            throw new IllegalStateException(
-//                "Die XRechnung-XML konnte nicht erzeugt werden.",
-//                exception
-//            );
-//        } catch (Exception exception) {
-//            throw new IllegalStateException(
-//                "Die XRechnung-XML konnte nicht geschrieben werden.",
-//                exception
-//            );
-//        }
-//    }
 
     public byte[] generate(XRechnungDto invoice) {
         validate(invoice);
@@ -782,25 +753,227 @@ public class InvoiceXmlGenerator {
         return items.get(0).getVatRate();
     }
 
-    private void validate(XRechnungDto invoice) {
+    private void validate(
+        XRechnungDto invoice
+    ) {
         if (invoice == null) {
-            throw new IllegalArgumentException("Die XRechnung darf nicht null sein.");
-        }
-        requireText(invoice.getInvoiceNumber(), "Rechnungsnummer");
-        requireNotNull(invoice.getInvoiceDate(), "Rechnungsdatum");
-        requireNotNull(invoice.getDueDate(), "Fälligkeitsdatum");
-        requireText(invoice.getBuyerReference(), "Buyer Reference");
-        requireNotNull(invoice.getSeller(), "Verkäufer");
-        requireNotNull(invoice.getBuyer(), "Käufer");
-        requireNotNull(invoice.getTotals(), "Summen");
-
-        if (invoice.getItems() == null || invoice.getItems().isEmpty()) {
             throw new IllegalArgumentException(
-                "Die XRechnung muss mindestens eine Position enthalten."
+                "Die XRechnung darf nicht null sein."
+            );
+        }
+
+        requireText(
+            invoice.getInvoiceNumber(),
+            "Rechnungsnummer"
+        );
+
+        requireNotNull(
+            invoice.getInvoiceDate(),
+            "Rechnungsdatum"
+        );
+
+        requireNotNull(
+            invoice.getDueDate(),
+            "Fälligkeitsdatum"
+        );
+
+        requireText(
+            invoice.getBuyerReference(),
+            "Buyer Reference"
+        );
+
+        requireNotNull(
+            invoice.getSeller(),
+            "Verkäufer"
+        );
+
+        requireNotNull(
+            invoice.getBuyer(),
+            "Käufer"
+        );
+
+        requireNotNull(
+            invoice.getTotals(),
+            "Summen"
+        );
+
+        if (invoice.getItems() == null
+            || invoice.getItems().isEmpty()) {
+
+            throw new IllegalArgumentException(
+                "Die XRechnung muss mindestens "
+                    + "eine Position enthalten."
+            );
+        }
+
+        validatePaymentInformation(
+            invoice
+        );
+    }
+    private void validatePaymentInformation(
+        XRechnungDto invoice
+    ) {
+        String paymentMeansCode =
+            defaultValue(
+                invoice.getPaymentMeansCode(),
+                "58"
+            );
+
+        if ("58".equals(paymentMeansCode)) {
+            requireText(
+                invoice.getIban(),
+                "IBAN bei SEPA-Überweisung"
+            );
+        }
+
+        if (notBlank(invoice.getIban())) {
+            validateIban(
+                invoice.getIban()
+            );
+        }
+
+        if (notBlank(invoice.getBic())) {
+            validateBic(
+                invoice.getBic()
             );
         }
     }
+    private void validateIban(
+        String iban
+    ) {
+        String normalizedIban =
+            normalizeIban(
+                iban
+            );
 
+        if (normalizedIban == null) {
+            throw new IllegalArgumentException(
+                "Die IBAN fehlt."
+            );
+        }
+
+        if (!normalizedIban.matches(
+            "[A-Z]{2}[0-9]{2}[A-Z0-9]+"
+        )) {
+            throw new IllegalArgumentException(
+                "Die IBAN besitzt ein ungültiges Format."
+            );
+        }
+
+        if (normalizedIban.length() < 15
+            || normalizedIban.length() > 34) {
+
+            throw new IllegalArgumentException(
+                "Die IBAN muss zwischen 15 und 34 "
+                    + "Zeichen enthalten."
+            );
+        }
+
+        if (normalizedIban.startsWith("DE")
+            && normalizedIban.length() != 22) {
+
+            throw new IllegalArgumentException(
+                "Eine deutsche IBAN muss genau "
+                    + "22 Zeichen enthalten. Aktuelle Länge: "
+                    + normalizedIban.length()
+                    + "."
+            );
+        }
+
+        String rearranged =
+            normalizedIban.substring(4)
+                + normalizedIban.substring(0, 4);
+
+        int remainder =
+            calculateIbanRemainder(
+                rearranged
+            );
+
+        if (remainder != 1) {
+            throw new IllegalArgumentException(
+                "Die IBAN besitzt eine ungültige Prüfsumme."
+            );
+        }
+    }
+    private int calculateIbanRemainder(
+        String value
+    ) {
+        int remainder =
+            0;
+
+        for (int index = 0;
+             index < value.length();
+             index++) {
+
+            char character =
+                value.charAt(index);
+
+            if (Character.isDigit(character)) {
+                remainder =
+                    appendDigitToRemainder(
+                        remainder,
+                        character - '0'
+                    );
+
+            } else if (character >= 'A'
+                && character <= 'Z') {
+
+                int numericValue =
+                    character - 'A' + 10;
+
+                remainder =
+                    appendDigitToRemainder(
+                        remainder,
+                        numericValue / 10
+                    );
+
+                remainder =
+                    appendDigitToRemainder(
+                        remainder,
+                        numericValue % 10
+                    );
+
+            } else {
+                throw new IllegalArgumentException(
+                    "Die IBAN enthält ein ungültiges Zeichen: "
+                        + character
+                );
+            }
+        }
+
+        return remainder;
+    }
+    private int appendDigitToRemainder(
+        int remainder,
+        int digit
+    ) {
+        return (
+            remainder * 10
+                + digit
+        ) % 97;
+    }
+
+    private void validateBic(
+        String bic
+    ) {
+        String normalizedBic =
+            normalizeBic(
+                bic
+            );
+
+        if (normalizedBic == null) {
+            return;
+        }
+
+        if (!normalizedBic.matches(
+            "[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?"
+        )) {
+            throw new IllegalArgumentException(
+                "Der BIC besitzt ein ungültiges Format. "
+                    + "Erwartet werden 8 oder 11 Zeichen."
+            );
+        }
+    }
     private void startRsm(XMLStreamWriter writer, String localName)
         throws XMLStreamException {
         writer.writeStartElement("rsm", localName, RSM);
@@ -1134,16 +1307,4 @@ public class InvoiceXmlGenerator {
             .replaceAll("\\s+", "")
             .toUpperCase();
     }
-
-//    private String normalizeBic(
-//        String bic
-//    ) {
-//        if (!notBlank(bic)) {
-//            return null;
-//        }
-//
-//        return bic
-//            .replaceAll("\\s+", "")
-//            .toUpperCase();
-//    }
 }

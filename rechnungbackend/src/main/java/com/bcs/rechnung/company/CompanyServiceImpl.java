@@ -23,10 +23,11 @@ public class CompanyServiceImpl
     @Transactional(readOnly = true)
     public List<CompanyDto> findAll() {
 
-        return companyRepository.findAll()
+        var x = companyRepository.findAll()
             .stream()
             .map(companyMapper::toDto)
             .toList();
+        return x;
     }
 
     @Override

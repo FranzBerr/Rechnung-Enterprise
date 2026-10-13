@@ -1,70 +1,65 @@
-import { axiosInstance } from "./axios";
+import axiosInstance from "./axiosInstance";
 
 import type {
-  Invoice,
+  InvoiceDto,
   InvoiceRequest,
 } from "../types/invoice";
 
-class InvoiceApi {
-
-  async findAll(): Promise<Invoice[]> {
-
+export const invoiceApi = {
+  async findAll(): Promise<InvoiceDto[]> {
     const response =
-      await axiosInstance.get<
-        Invoice[]
-      >("/invoices");
+      await axiosInstance.get<InvoiceDto[]>(
+        "/invoices"
+      );
 
     return response.data;
-  }
+  },
 
   async findById(
     id: number
-  ): Promise<Invoice> {
-
+  ): Promise<InvoiceDto> {
     const response =
-      await axiosInstance.get<
-        Invoice
-      >(`/invoices/${id}`);
+      await axiosInstance.get<InvoiceDto>(
+        `/invoices/${id}`
+      );
 
     return response.data;
-  }
+  },
 
   async create(
     request: InvoiceRequest
-  ): Promise<Invoice> {
-
+  ): Promise<InvoiceDto> {
     const response =
       await axiosInstance.post<
-        Invoice
+        InvoiceDto
       >(
         "/invoices",
         request
       );
 
     return response.data;
-  }
+  },
 
-  async complete(
-    id: number
-  ): Promise<Invoice> {
-
+  async update(
+    id: number,
+    request: InvoiceRequest
+  ): Promise<InvoiceDto> {
     const response =
-      await axiosInstance.post<
-        Invoice
+      await axiosInstance.put<
+        InvoiceDto
       >(
-        `/invoices/${id}/complete`
+        `/invoices/${id}`,
+        request
       );
 
     return response.data;
-  }
+  },
 
-  getPdfUrl(
+  async delete(
     id: number
-  ): string {
-
-    return `${axiosInstance.defaults.baseURL}/invoices/${id}/pdf`;
-  }
-}
-
-export const invoiceApi =
-  new InvoiceApi();
+  ): Promise<void> {
+    await axiosInstance.delete(
+      `/invoices/${id}`
+    );
+  },
+};

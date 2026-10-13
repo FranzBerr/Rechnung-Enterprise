@@ -1,12 +1,13 @@
-/*
- * Core HTTP Client
- */
+export {
+  default as api,
+} from "./axiosInstance";
 
-export { axiosInstance } from "./axios";
+export {
+  invoiceApi,
+} from "./invoiceApi";
 
-export { companyApi } from "./companyApi";
-export { bankAccountApi } from "./bankAccountApi";
-export { customerApi } from "./customerApi";
-export { productApi } from "./productApi";
-export { invoiceApi } from "./invoiceApi";
-``
+export * from "./customerApi";
+export * from "./companyApi";
+export * from "./bankApi";
+export * from "./bankAccountApi";
+export * from "./productApi";

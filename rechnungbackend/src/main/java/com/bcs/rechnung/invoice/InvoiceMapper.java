@@ -45,6 +45,8 @@ public class InvoiceMapper {
             entity.getTaxAmount(),
             entity.getTotalGross(),
             entity.getNotes(),
+            entity.getArchived(),
+            entity.getArchivedAt(),
             items
         );
     }

@@ -11,7 +11,7 @@ spring:
     open-in-view: false
 
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
 
 server:
   port: 8080
@@ -33,3 +33,15 @@ xrechnung:
 pdf:
   output-directory: 'C:\PolyRackDummy\Rechning gesamt\Rechnung-Enterprise-formatiert\Rechnung-Enterprise\pdf'
 
+invoice-documents:
+  archive-directory: "C:/PolyRackDummy/Rechning gesamt/Rechnung-Enterprise-formatiert/Rechnung-Enterprise/archive"
+
+  temp-directory: "C:/PolyRackDummy/Rechning gesamt/Rechnung-Enterprise-formatiert/Rechnung-Enterprise/temp"
+
+  validator-jar: "C:/PolyRackDummy/Rechning gesamt/Rechnung-Enterprise-formatiert/Rechnung-Enterprise/XRechnungValidator/validator-1.6.3-standalone.jar"
+
+  validator-scenario: "C:/PolyRackDummy/Rechning gesamt/Rechnung-Enterprise-formatiert/Rechnung-Enterprise/XRechnungValidator/scenarios.xml"
+
+  validator-repository: "C:/PolyRackDummy/Rechning gesamt/Rechnung-Enterprise-formatiert/Rechnung-Enterprise/XRechnungValidator"
+
+  validator-timeout-seconds: 180

@@ -1,15 +1,12 @@
-import { axiosInstance } from "./axios";
+// import { axiosInstance } from "./axiosInstance";
 
+import axiosInstance from "./axiosInstance";
 
-// -------------------------------------------------------
-//      Generic Client
-// -------------------------------------------------------
 export class BaseApiClient<T> {
 
   constructor(
     private readonly path: string
-  ) {
-  }
+  ) {}
 
   async findAll(): Promise<T[]> {
 
@@ -67,5 +64,35 @@ export class BaseApiClient<T> {
     await axiosInstance.delete(
       `${this.path}/${id}`
     );
+  }
+
+  async downloadPdf(
+    id: number
+  ): Promise<Blob> {
+
+    const response =
+      await axiosInstance.get(
+        `${this.path}/${id}/pdf`,
+        {
+          responseType: "blob",
+        }
+      );
+
+    return response.data;
+  }
+
+  async downloadXml(
+    id: number
+  ): Promise<Blob> {
+
+    const response =
+      await axiosInstance.get(
+        `${this.path}/${id}/xml`,
+        {
+          responseType: "blob",
+        }
+      );
+
+    return response.data;
   }
 }

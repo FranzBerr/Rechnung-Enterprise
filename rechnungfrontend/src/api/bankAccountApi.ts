@@ -1,9 +1,10 @@
-import { axiosInstance } from "./axios";
+import axiosInstance from "./axiosInstance";
 
 import type {
   BankAccount,
   BankAccountRequest,
 } from "../types/bankAccount";
+
 
 class BankAccountApi {
 
