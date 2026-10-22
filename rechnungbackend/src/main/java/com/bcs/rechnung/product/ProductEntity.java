@@ -3,28 +3,30 @@ package com.bcs.rechnung.product;
 import com.bcs.rechnung.company.CompanyEntity;
 import jakarta.persistence.*;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
 
 @Getter
 @Setter
+@NoArgsConstructor
 @Entity
-@Table(name = "product")
+@Table(
+    name = "product",
+    uniqueConstraints = @UniqueConstraint(
+        name = "UK_PRODUCT_PRODUCT_NUMBER",
+        columnNames = "product_number"
+    )
+)
 public class ProductEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(
-        fetch = FetchType.LAZY,
-        optional = false
-    )
-    @JoinColumn(
-        name = "company_id",
-        nullable = false
-    )
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "company_id", nullable = false)
     private CompanyEntity company;
 
     @Column(
@@ -35,17 +37,17 @@ public class ProductEntity {
     private String productNumber;
 
     @Column(
+        name = "name",
         nullable = false,
         length = 200
     )
     private String name;
 
-    @Column(
-        length = 1000
-    )
+    @Column(name = "description", length = 1000)
     private String description;
 
     @Column(
+        name = "unit",
         nullable = false,
         length = 30
     )
@@ -59,8 +61,6 @@ public class ProductEntity {
     )
     private BigDecimal netPrice;
 
-    @Column(
-        nullable = false
-    )
+    @Column(name = "active", nullable = false)
     private boolean active = true;
 }

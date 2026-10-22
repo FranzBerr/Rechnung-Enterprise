@@ -15,10 +15,7 @@ import {
 } from "@mui/material";
 
 import { invoiceApi } from "../../api";
-
-import type {
-  InvoiceDto,
-} from "../../types";
+import {InvoiceDto} from "../../types/invoice/InvoiceDto";
 
 export default function InvoiceListPage() {
   const [invoices, setInvoices] =

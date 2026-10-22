@@ -22,7 +22,6 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
-import java.time.Year;
 import java.util.Comparator;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -32,8 +31,14 @@ import java.util.stream.Stream;
 public class InvoiceDocumentServiceImpl
     implements InvoiceDocumentService {
 
+    private static final String INVOICE_DIRECTORY =
+        "Rechnungen";
+
     private static final String VALIDATION_DIRECTORY =
         "validation";
+
+    private static final String VALIDATION_REPORT_FILE =
+        "validation-report.xml";
 
     private static final String VALIDATOR_LOG_FILE =
         "validator-console.log";
@@ -59,18 +64,12 @@ public class InvoiceDocumentServiceImpl
     public ArchivedInvoiceDocuments generateValidateAndArchive(
         Long invoiceId
     ) {
-        validateInvoiceId(
-            invoiceId
-        );
+        validateInvoiceId(invoiceId);
 
         InvoiceEntity invoice =
-            findInvoice(
-                invoiceId
-            );
+            findInvoice(invoiceId);
 
-        validateNotArchived(
-            invoice
-        );
+        validateNotArchived(invoice);
 
         GeneratedXRechnung generatedXml =
             invoiceXmlService.generateXml(
@@ -121,18 +120,16 @@ public class InvoiceDocumentServiceImpl
                     pdfFileName
                 );
 
-            Files.write(
+            writeTemporaryFile(
                 temporaryXml,
                 generatedXml.content(),
-                StandardOpenOption.CREATE_NEW,
-                StandardOpenOption.WRITE
+                "XRechnung"
             );
 
-            Files.write(
+            writeTemporaryFile(
                 temporaryPdf,
                 generatedPdf.content(),
-                StandardOpenOption.CREATE_NEW,
-                StandardOpenOption.WRITE
+                "PDF-Rechnung"
             );
 
             return validateAndArchive(
@@ -144,14 +141,11 @@ public class InvoiceDocumentServiceImpl
             );
 
         } catch (InvalidXRechnungException exception) {
-            preserveWorkingDirectory =
-                true;
-
+            preserveWorkingDirectory = true;
             throw exception;
 
         } catch (IOException exception) {
-            preserveWorkingDirectory =
-                true;
+            preserveWorkingDirectory = true;
 
             throw new IllegalStateException(
                 "Die Rechnungsdokumente konnten nicht "
@@ -160,9 +154,7 @@ public class InvoiceDocumentServiceImpl
             );
 
         } catch (RuntimeException exception) {
-            preserveWorkingDirectory =
-                true;
-
+            preserveWorkingDirectory = true;
             throw exception;
 
         } finally {
@@ -179,18 +171,12 @@ public class InvoiceDocumentServiceImpl
     public ArchivedInvoiceDocuments archiveExistingDocuments(
         Long invoiceId
     ) {
-        validateInvoiceId(
-            invoiceId
-        );
+        validateInvoiceId(invoiceId);
 
         InvoiceEntity invoice =
-            findInvoice(
-                invoiceId
-            );
+            findInvoice(invoiceId);
 
-        validateNotArchived(
-            invoice
-        );
+        validateNotArchived(invoice);
 
         String invoiceNumber =
             normalizeInvoiceNumber(
@@ -261,14 +247,11 @@ public class InvoiceDocumentServiceImpl
             );
 
         } catch (InvalidXRechnungException exception) {
-            preserveWorkingDirectory =
-                true;
-
+            preserveWorkingDirectory = true;
             throw exception;
 
         } catch (IOException exception) {
-            preserveWorkingDirectory =
-                true;
+            preserveWorkingDirectory = true;
 
             throw new IllegalStateException(
                 "Die vorhandenen Rechnungsdokumente "
@@ -277,9 +260,7 @@ public class InvoiceDocumentServiceImpl
             );
 
         } catch (RuntimeException exception) {
-            preserveWorkingDirectory =
-                true;
-
+            preserveWorkingDirectory = true;
             throw exception;
 
         } finally {
@@ -321,55 +302,29 @@ public class InvoiceDocumentServiceImpl
 
         Path archiveDirectory =
             createArchiveDirectory(
-                invoiceNumber
+                invoice
             );
 
-        String pdfFileName =
-            FilenameUtils.pdfFileName(
-                invoiceNumber
-            );
-
-        String xmlFileName =
-            FilenameUtils.xmlFileName(
-                invoiceNumber
-            );
-
-        Path archivedPdf =
-            archiveDirectory.resolve(
-                pdfFileName
-            );
-
-        Path archivedXml =
-            archiveDirectory.resolve(
-                xmlFileName
-            );
-
-        Path archivedReport =
-            archiveDirectory.resolve(
-                invoiceNumber
-                    + "-validation-report.xml"
-            );
-
-        Path archivedValidatorLog =
-            archiveDirectory.resolve(
-                invoiceNumber
-                    + "-validator-console.log"
+        ArchiveFiles archiveFiles =
+            createArchiveFiles(
+                invoiceNumber,
+                archiveDirectory
             );
 
         moveReplacing(
             temporaryPdf,
-            archivedPdf
+            archiveFiles.pdf()
         );
 
         moveReplacing(
             temporaryXml,
-            archivedXml
+            archiveFiles.xml()
         );
 
-        Files.copy(
+        copyRequiredFile(
             validation.reportFile(),
-            archivedReport,
-            StandardCopyOption.REPLACE_EXISTING
+            archiveFiles.validationReport(),
+            "KoSIT-Prüfbericht"
         );
 
         Path temporaryValidatorLog =
@@ -377,60 +332,51 @@ public class InvoiceDocumentServiceImpl
                 VALIDATOR_LOG_FILE
             );
 
-        String validatorLogPath =
-            null;
+        copyRequiredFile(
+            temporaryValidatorLog,
+            archiveFiles.validatorLog(),
+            "Validator-Protokoll"
+        );
 
-        if (Files.isRegularFile(
-            temporaryValidatorLog
-        )) {
-            Files.copy(
-                temporaryValidatorLog,
-                archivedValidatorLog,
-                StandardCopyOption.REPLACE_EXISTING
-            );
-
-            validatorLogPath =
-                archivedValidatorLog.toString();
-        }
+        validateArchiveFiles(
+            archiveFiles
+        );
 
         LocalDateTime archivedAt =
             LocalDateTime.now();
 
-        saveArchiveEntry(
-            invoice.getId(),
-            invoiceNumber,
-            archiveDirectory,
-            archivedPdf,
-            archivedXml,
-            archivedReport,
-            validatorLogPath,
-            archivedAt
-        );
+        InvoiceDocumentArchiveEntity archive =
+            saveArchiveEntry(
+                invoice.getId(),
+                invoiceNumber,
+                archiveDirectory,
+                archiveFiles,
+                archivedAt
+            );
 
         markInvoiceAsArchived(
             invoice,
-            archivedAt
+            archive
         );
 
         return new ArchivedInvoiceDocuments(
             invoiceNumber,
-            archiveDirectory.toString(),
-            archivedPdf.toString(),
-            archivedXml.toString(),
-            archivedReport.toString(),
+            absolutePath(archiveDirectory),
+            absolutePath(archiveFiles.pdf()),
+            absolutePath(archiveFiles.xml()),
+            absolutePath(
+                archiveFiles.validationReport()
+            ),
             true,
             validation.warnings()
         );
     }
 
-    private void saveArchiveEntry(
+    private InvoiceDocumentArchiveEntity saveArchiveEntry(
         Long invoiceId,
         String invoiceNumber,
         Path archiveDirectory,
-        Path archivedPdf,
-        Path archivedXml,
-        Path archivedReport,
-        String validatorLogPath,
+        ArchiveFiles archiveFiles,
         LocalDateTime archivedAt
     ) {
         requirePath(
@@ -439,25 +385,28 @@ public class InvoiceDocumentServiceImpl
         );
 
         requirePath(
-            archivedPdf,
+            archiveFiles.pdf(),
             "Archivierte PDF-Datei"
         );
 
         requirePath(
-            archivedXml,
+            archiveFiles.xml(),
             "Archivierte XML-Datei"
         );
 
         requirePath(
-            archivedReport,
+            archiveFiles.validationReport(),
             "Archivierter Prüfbericht"
+        );
+
+        requirePath(
+            archiveFiles.validatorLog(),
+            "Archiviertes Validator-Protokoll"
         );
 
         InvoiceDocumentArchiveEntity entity =
             archiveRepository
-                .findByInvoiceId(
-                    invoiceId
-                )
+                .findByInvoiceId(invoiceId)
                 .orElseGet(
                     InvoiceDocumentArchiveEntity::new
                 );
@@ -471,51 +420,59 @@ public class InvoiceDocumentServiceImpl
         );
 
         entity.setArchiveDirectory(
-            archiveDirectory.toString()
+            absolutePath(archiveDirectory)
         );
 
         entity.setPdfFile(
-            archivedPdf.toString()
+            absolutePath(
+                archiveFiles.pdf()
+            )
         );
 
         entity.setXmlFile(
-            archivedXml.toString()
+            absolutePath(
+                archiveFiles.xml()
+            )
         );
 
         entity.setValidationReport(
-            archivedReport.toString()
+            absolutePath(
+                archiveFiles.validationReport()
+            )
         );
 
         entity.setValidatorLog(
-            validatorLogPath
+            absolutePath(
+                archiveFiles.validatorLog()
+            )
         );
 
-        entity.setValid(
-            true
-        );
+        entity.setValid(true);
 
         entity.setArchivedAt(
             archivedAt
         );
 
-        archiveRepository.saveAndFlush(
+        return archiveRepository.saveAndFlush(
             entity
         );
     }
 
     private void markInvoiceAsArchived(
         InvoiceEntity invoice,
-        LocalDateTime archivedAt
+        InvoiceDocumentArchiveEntity archive
     ) {
-        invoice.setArchived(
-            true
-        );
+        invoice.setArchived(true);
 
         invoice.setArchivedAt(
-            archivedAt
+            archive.getArchivedAt()
         );
 
-        invoiceRepository.save(
+        invoice.setArchivePath(
+            archive.getArchiveDirectory()
+        );
+
+        invoiceRepository.saveAndFlush(
             invoice
         );
     }
@@ -524,9 +481,7 @@ public class InvoiceDocumentServiceImpl
         Long invoiceId
     ) {
         return invoiceRepository
-            .findById(
-                invoiceId
-            )
+            .findById(invoiceId)
             .orElseThrow(() ->
                 new ResourceNotFoundException(
                     "Rechnung mit ID "
@@ -539,15 +494,281 @@ public class InvoiceDocumentServiceImpl
     private void validateNotArchived(
         InvoiceEntity invoice
     ) {
-        if (Boolean.TRUE.equals(
-            invoice.getArchived()
-        )) {
+        if (
+            Boolean.TRUE.equals(
+                invoice.getArchived()
+            )
+        ) {
             throw new InvoiceAlreadyArchivedException(
                 invoice.getId(),
                 invoice.getInvoiceNumber(),
                 invoice.getArchivedAt()
             );
         }
+
+        if (
+            archiveRepository.existsByInvoiceId(
+                invoice.getId()
+            )
+        ) {
+            throw new IllegalStateException(
+                "Für die Rechnung "
+                    + invoice.getInvoiceNumber()
+                    + " existiert bereits ein Archivdatensatz."
+            );
+        }
+    }
+
+    private Path createArchiveDirectory(
+        InvoiceEntity invoice
+    ) throws IOException {
+
+        if (invoice.getInvoiceDate() == null) {
+            throw new IllegalStateException(
+                "Die Rechnung besitzt kein Rechnungsdatum."
+            );
+        }
+
+        String invoiceNumber =
+            normalizeInvoiceNumber(
+                invoice.getInvoiceNumber()
+            );
+
+        Path archiveRoot =
+            Path.of(
+                    properties.getArchiveDirectory()
+                )
+                .toAbsolutePath()
+                .normalize();
+
+        Files.createDirectories(
+            archiveRoot
+        );
+
+        String invoiceYear =
+            String.valueOf(
+                invoice.getInvoiceDate().getYear()
+            );
+
+        Path yearDirectory =
+            archiveRoot
+                .resolve(invoiceYear)
+                .normalize();
+
+        Path invoiceTypeDirectory =
+            yearDirectory
+                .resolve(INVOICE_DIRECTORY)
+                .normalize();
+
+        Path archiveDirectory =
+            invoiceTypeDirectory
+                .resolve(
+                    safeDirectoryName(
+                        invoiceNumber
+                    )
+                )
+                .normalize();
+
+        if (!yearDirectory.startsWith(archiveRoot)) {
+            throw new IllegalStateException(
+                "Das ermittelte Jahresverzeichnis "
+                    + "liegt außerhalb des Archivs."
+            );
+        }
+
+        if (
+            !invoiceTypeDirectory.startsWith(
+                archiveRoot
+            )
+        ) {
+            throw new IllegalStateException(
+                "Das Rechnungsverzeichnis liegt "
+                    + "außerhalb des Archivs."
+            );
+        }
+
+        if (
+            !archiveDirectory.startsWith(
+                invoiceTypeDirectory
+            )
+        ) {
+            throw new IllegalStateException(
+                "Der ermittelte Rechnungsarchivpfad "
+                    + "ist ungültig."
+            );
+        }
+
+        Files.createDirectories(
+            archiveDirectory
+        );
+
+        return archiveDirectory;
+    }
+
+    private ArchiveFiles createArchiveFiles(
+        String invoiceNumber,
+        Path archiveDirectory
+    ) {
+        String normalizedInvoiceNumber =
+            normalizeInvoiceNumber(
+                invoiceNumber
+            );
+
+        String pdfFileName =
+            FilenameUtils.pdfFileName(
+                normalizedInvoiceNumber
+            );
+
+        String xmlFileName =
+            FilenameUtils.xmlFileName(
+                normalizedInvoiceNumber
+            );
+
+        return new ArchiveFiles(
+            archiveDirectory.resolve(
+                pdfFileName
+            ),
+            archiveDirectory.resolve(
+                xmlFileName
+            ),
+            archiveDirectory.resolve(
+                VALIDATION_REPORT_FILE
+            ),
+            archiveDirectory.resolve(
+                VALIDATOR_LOG_FILE
+            )
+        );
+    }
+
+    private void validateArchiveFiles(
+        ArchiveFiles files
+    ) {
+        validateArchiveFile(
+            files.pdf(),
+            "PDF-Datei"
+        );
+
+        validateArchiveFile(
+            files.xml(),
+            "XRechnung-XML"
+        );
+
+        validateArchiveFile(
+            files.validationReport(),
+            "KoSIT-Prüfbericht"
+        );
+
+        validateArchiveFile(
+            files.validatorLog(),
+            "Validator-Protokoll"
+        );
+    }
+
+    private void validateArchiveFile(
+        Path file,
+        String documentType
+    ) {
+        requirePath(
+            file,
+            documentType
+        );
+
+        if (!Files.isRegularFile(file)) {
+            throw new IllegalStateException(
+                documentType
+                    + " wurde nicht im Archiv erzeugt: "
+                    + file
+            );
+        }
+
+        if (!Files.isReadable(file)) {
+            throw new IllegalStateException(
+                documentType
+                    + " ist nicht lesbar: "
+                    + file
+            );
+        }
+
+        try {
+            if (Files.size(file) == 0) {
+                throw new IllegalStateException(
+                    documentType
+                        + " ist leer: "
+                        + file
+                );
+            }
+
+        } catch (IOException exception) {
+            throw new IllegalStateException(
+                documentType
+                    + " konnte nicht geprüft werden: "
+                    + file,
+                exception
+            );
+        }
+    }
+
+    private void copyRequiredFile(
+        Path source,
+        Path target,
+        String documentType
+    ) throws IOException {
+
+        requirePath(
+            source,
+            documentType
+        );
+
+        requirePath(
+            target,
+            documentType + " Zielpfad"
+        );
+
+        if (!Files.isRegularFile(source)) {
+            throw new IllegalStateException(
+                documentType
+                    + " wurde nicht erzeugt: "
+                    + source
+            );
+        }
+
+        if (!Files.isReadable(source)) {
+            throw new IllegalStateException(
+                documentType
+                    + " ist nicht lesbar: "
+                    + source
+            );
+        }
+
+        Files.copy(
+            source,
+            target,
+            StandardCopyOption.REPLACE_EXISTING
+        );
+    }
+
+    private void writeTemporaryFile(
+        Path file,
+        byte[] content,
+        String documentType
+    ) throws IOException {
+
+        if (
+            content == null
+                || content.length == 0
+        ) {
+            throw new IllegalStateException(
+                documentType
+                    + " enthält keine Daten."
+            );
+        }
+
+        Files.write(
+            file,
+            content,
+            StandardOpenOption.CREATE_NEW,
+            StandardOpenOption.WRITE
+        );
     }
 
     private Path resolveExistingFile(
@@ -555,9 +776,10 @@ public class InvoiceDocumentServiceImpl
         String fileName,
         String documentType
     ) {
-        if (configuredDirectory == null
-            || configuredDirectory.isBlank()) {
-
+        if (
+            configuredDirectory == null
+                || configuredDirectory.isBlank()
+        ) {
             throw new IllegalStateException(
                 "Das Ausgabeverzeichnis für "
                     + documentType
@@ -566,21 +788,16 @@ public class InvoiceDocumentServiceImpl
         }
 
         Path directory =
-            Path.of(
-                    configuredDirectory
-                )
+            Path.of(configuredDirectory)
                 .toAbsolutePath()
                 .normalize();
 
         Path file =
-            directory.resolve(
-                    fileName
-                )
+            directory
+                .resolve(fileName)
                 .normalize();
 
-        if (!file.startsWith(
-            directory
-        )) {
+        if (!file.startsWith(directory)) {
             throw new IllegalStateException(
                 "Der ermittelte Dateipfad für "
                     + documentType
@@ -588,9 +805,7 @@ public class InvoiceDocumentServiceImpl
             );
         }
 
-        if (!Files.isRegularFile(
-            file
-        )) {
+        if (!Files.isRegularFile(file)) {
             throw new ResourceNotFoundException(
                 documentType
                     + " wurde nicht gefunden: "
@@ -598,9 +813,7 @@ public class InvoiceDocumentServiceImpl
             );
         }
 
-        if (!Files.isReadable(
-            file
-        )) {
+        if (!Files.isReadable(file)) {
             throw new IllegalStateException(
                 documentType
                     + " ist nicht lesbar: "
@@ -614,11 +827,22 @@ public class InvoiceDocumentServiceImpl
     private Path createWorkingDirectory(
         String invoiceNumber
     ) {
+        String tempDirectory =
+            properties.getTempDirectory();
+
+        if (
+            tempDirectory == null
+                || tempDirectory.isBlank()
+        ) {
+            throw new IllegalStateException(
+                "Das temporäre Arbeitsverzeichnis "
+                    + "ist nicht konfiguriert."
+            );
+        }
+
         try {
             Path tempRoot =
-                Path.of(
-                        properties.getTempDirectory()
-                    )
+                Path.of(tempDirectory)
                     .toAbsolutePath()
                     .normalize();
 
@@ -627,21 +851,20 @@ public class InvoiceDocumentServiceImpl
             );
 
             String directoryName =
-                safeDirectoryName(
-                    invoiceNumber
-                )
+                safeDirectoryName(invoiceNumber)
                     + "-"
                     + UUID.randomUUID();
 
             Path workingDirectory =
-                tempRoot.resolve(
-                        directoryName
-                    )
+                tempRoot
+                    .resolve(directoryName)
                     .normalize();
 
-            if (!workingDirectory.startsWith(
-                tempRoot
-            )) {
+            if (
+                !workingDirectory.startsWith(
+                    tempRoot
+                )
+            ) {
                 throw new IllegalStateException(
                     "Der temporäre Arbeitsordner liegt "
                         + "außerhalb des konfigurierten "
@@ -662,53 +885,6 @@ public class InvoiceDocumentServiceImpl
         }
     }
 
-    private Path createArchiveDirectory(
-        String invoiceNumber
-    ) throws IOException {
-
-        Path archiveRoot =
-            Path.of(
-                    properties.getArchiveDirectory()
-                )
-                .toAbsolutePath()
-                .normalize();
-
-        Files.createDirectories(
-            archiveRoot
-        );
-
-        String invoiceYear =
-            extractInvoiceYear(
-                invoiceNumber
-            );
-
-        Path archiveDirectory =
-            archiveRoot
-                .resolve(
-                    invoiceYear
-                )
-                .resolve(
-                    safeDirectoryName(
-                        invoiceNumber
-                    )
-                )
-                .normalize();
-
-        if (!archiveDirectory.startsWith(
-            archiveRoot
-        )) {
-            throw new IllegalStateException(
-                "Der ermittelte Archivpfad ist ungültig."
-            );
-        }
-
-        Files.createDirectories(
-            archiveDirectory
-        );
-
-        return archiveDirectory;
-    }
-
     private void verifyInvoiceNumbers(
         String xmlInvoiceNumber,
         String pdfInvoiceNumber
@@ -723,9 +899,11 @@ public class InvoiceDocumentServiceImpl
                 pdfInvoiceNumber
             );
 
-        if (!normalizedXmlNumber.equals(
-            normalizedPdfNumber
-        )) {
+        if (
+            !normalizedXmlNumber.equals(
+                normalizedPdfNumber
+            )
+        ) {
             throw new IllegalStateException(
                 "PDF und XRechnung besitzen nicht "
                     + "dieselbe Rechnungsnummer. XML: "
@@ -739,36 +917,16 @@ public class InvoiceDocumentServiceImpl
     private String normalizeInvoiceNumber(
         String invoiceNumber
     ) {
-        if (invoiceNumber == null
-            || invoiceNumber.isBlank()) {
-
+        if (
+            invoiceNumber == null
+                || invoiceNumber.isBlank()
+        ) {
             throw new IllegalStateException(
                 "Die Rechnungsnummer fehlt."
             );
         }
 
         return invoiceNumber.trim();
-    }
-
-    private String extractInvoiceYear(
-        String invoiceNumber
-    ) {
-        String[] parts =
-            invoiceNumber.split(
-                "-"
-            );
-
-        for (String part : parts) {
-            if (part.matches(
-                "(19|20)\\d{2}"
-            )) {
-                return part;
-            }
-        }
-
-        return Integer.toString(
-            Year.now().getValue()
-        );
     }
 
     private String safeDirectoryName(
@@ -780,6 +938,20 @@ public class InvoiceDocumentServiceImpl
             "[\\\\/:*?\"<>|]",
             "-"
         );
+    }
+
+    private String absolutePath(
+        Path path
+    ) {
+        requirePath(
+            path,
+            "Dateipfad"
+        );
+
+        return path
+            .toAbsolutePath()
+            .normalize()
+            .toString();
     }
 
     private void requirePath(
@@ -798,6 +970,17 @@ public class InvoiceDocumentServiceImpl
         Path source,
         Path target
     ) throws IOException {
+
+        requirePath(
+            source,
+            "Quelldatei"
+        );
+
+        requirePath(
+            target,
+            "Zieldatei"
+        );
+
         try {
             Files.move(
                 source,
@@ -820,19 +1003,16 @@ public class InvoiceDocumentServiceImpl
     private void deleteRecursively(
         Path directory
     ) {
-        if (directory == null
-            || !Files.exists(
-            directory
-        )) {
-
+        if (
+            directory == null
+                || !Files.exists(directory)
+        ) {
             return;
         }
 
         try (
             Stream<Path> paths =
-                Files.walk(
-                    directory
-                )
+                Files.walk(directory)
         ) {
             paths
                 .sorted(
@@ -844,22 +1024,35 @@ public class InvoiceDocumentServiceImpl
                             path
                         );
                     } catch (IOException ignored) {
+                        // Aufräumfehler verändern das
+                        // fachliche Ergebnis nicht.
                     }
                 });
 
         } catch (IOException ignored) {
+            // Aufräumfehler verändern das
+            // fachliche Ergebnis nicht.
         }
     }
 
     private void validateInvoiceId(
         Long invoiceId
     ) {
-        if (invoiceId == null
-            || invoiceId <= 0) {
-
+        if (
+            invoiceId == null
+                || invoiceId <= 0
+        ) {
             throw new IllegalArgumentException(
                 "Die Rechnungs-ID muss größer als 0 sein."
             );
         }
+    }
+
+    private record ArchiveFiles(
+        Path pdf,
+        Path xml,
+        Path validationReport,
+        Path validatorLog
+    ) {
     }
 }

@@ -7,26 +7,23 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
 
-@Entity
-@Table(
-    name = "invoice_document_archive",
-    schema = "dbo"
-)
 @Getter
 @Setter
+@NoArgsConstructor
+@Entity
+@Table(
+    name = "invoice_document_archive"
+)
 public class InvoiceDocumentArchiveEntity {
 
     @Id
     @GeneratedValue(
         strategy = GenerationType.IDENTITY
-    )
-    @Column(
-        name = "id",
-        nullable = false
     )
     private Long id;
 

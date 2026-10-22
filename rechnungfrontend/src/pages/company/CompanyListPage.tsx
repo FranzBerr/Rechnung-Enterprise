@@ -10,6 +10,12 @@ import {
   CardContent,
   CircularProgress,
   Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   Typography,
 } from "@mui/material";
 
@@ -20,18 +26,13 @@ import type {
 } from "../../types";
 
 export default function CompanyListPage() {
-  const [companies, setCompanies] =
-    useState<Company[]>([]);
 
-  const [loading, setLoading] =
-    useState(true);
-
-  const [error, setError] =
-    useState("");
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] =  useState("");
 
   useEffect(() => {
-    companyApi
-      .findAll()
+    companyApi.findAll()
       .then((data) => {
         setCompanies(data);
       })
@@ -46,24 +47,6 @@ export default function CompanyListPage() {
         setLoading(false);
       });
   }, []);
-
-  // useEffect(() => {
-  //   companyApi
-  //     .findAll()
-  //     .then((data) => {
-  //       setCompanies(data);
-  //     })
-  //     .catch((reason: unknown) => {
-  //       if (reason instanceof Error) {
-  //         setError(reason.message);
-  //       } else {
-  //         setError(String(reason));
-  //       }
-  //     })
-  //     .finally(() => {
-  //       setLoading(false);
-  //     });
-  // }, []);
 
   return (
     <Stack spacing={3}>
@@ -125,25 +108,96 @@ export default function CompanyListPage() {
                 Keine Firmen vorhanden.
               </Typography>
             ) : (
-              <Stack spacing={1}>
-                {companies.map(
-                  (company) => (
+              <TableContainer>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>
+                        ID
+                      </TableCell>
 
+                      <TableCell>
+                        Firma
+                      </TableCell>
 
-                    <Typography
-                      key={company.id}
-                    >
-                      {company.name}
-                      {" - "}
-                      {company.zipCode}
-                      {" - "}
-                      {company.city}
-                      {" - "}
-                      {company.country}
-                    </Typography>
-                  )
-                )}
-              </Stack>
+                      <TableCell>
+                        Rechtsform
+                      </TableCell>
+
+                      <TableCell>
+                        Straße
+                      </TableCell>
+
+                      <TableCell>
+                        PLZ
+                      </TableCell>
+
+                      <TableCell>
+                        Ort
+                      </TableCell>
+
+                      <TableCell>
+                        Land
+                      </TableCell>
+
+                      <TableCell>
+                        USt-IdNr.
+                      </TableCell>
+
+                      <TableCell>
+                        Aktiv
+                      </TableCell>
+                    </TableRow>
+                  </TableHead>
+
+                  <TableBody>
+                    {companies.map((company) => (
+                      <TableRow
+                        key={company.id}
+                        hover
+                      >
+                        <TableCell>
+                          {company.id}
+                        </TableCell>
+
+                        <TableCell>
+                          {company.name}
+                        </TableCell>
+
+                        <TableCell>
+                          {company.legalForm ?? "-"}
+                        </TableCell>
+
+                        <TableCell>
+                          {company.street}
+                        </TableCell>
+
+                        <TableCell>
+                          {company.zipCode}
+                        </TableCell>
+
+                        <TableCell>
+                          {company.city}
+                        </TableCell>
+
+                        <TableCell>
+                          {company.country}
+                        </TableCell>
+
+                        <TableCell>
+                          {company.vatId}
+                        </TableCell>
+
+                        <TableCell>
+                          {company.active
+                            ? "Ja"
+                            : "Nein"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
             )}
           </CardContent>
         </Card>

@@ -18,6 +18,7 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
@@ -28,12 +29,15 @@ import java.util.List;
 
 @Getter
 @Setter
+@NoArgsConstructor
 @Entity
 @Table(name = "invoice")
 public class InvoiceEntity {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(
+        strategy = GenerationType.IDENTITY
+    )
     private Long id;
 
     @Column(
@@ -61,7 +65,9 @@ public class InvoiceEntity {
     )
     private LocalDate dueDate;
 
-    @Enumerated(EnumType.STRING)
+    @Enumerated(
+        EnumType.STRING
+    )
     @Column(
         name = "status",
         nullable = false,
@@ -69,6 +75,10 @@ public class InvoiceEntity {
     )
     private InvoiceStatus status =
         InvoiceStatus.DRAFT;
+
+    // ---------------------------------------------------------
+    // Beziehungen
+    // ---------------------------------------------------------
 
     @ManyToOne(
         fetch = FetchType.LAZY,
@@ -100,9 +110,9 @@ public class InvoiceEntity {
     )
     private BankAccountEntity bankAccount;
 
-    /*
-     * Snapshot Kundendaten
-     */
+    // ---------------------------------------------------------
+    // Snapshot Kundendaten
+    // ---------------------------------------------------------
 
     @Column(
         name = "customer_number",
@@ -148,9 +158,9 @@ public class InvoiceEntity {
     )
     private String customerVatId;
 
-    /*
-     * Snapshot Bankdaten
-     */
+    // ---------------------------------------------------------
+    // Snapshot Bankdaten
+    // ---------------------------------------------------------
 
     @Column(
         name = "bank_name",
@@ -173,9 +183,9 @@ public class InvoiceEntity {
     )
     private String bic;
 
-    /*
-     * Zahlungsbedingungen
-     */
+    // ---------------------------------------------------------
+    // Zahlungsbedingungen
+    // ---------------------------------------------------------
 
     @Column(
         name = "payment_term_days",
@@ -198,9 +208,9 @@ public class InvoiceEntity {
     )
     private Integer discountDays = 0;
 
-    /*
-     * Summen
-     */
+    // ---------------------------------------------------------
+    // Summen
+    // ---------------------------------------------------------
 
     @Column(
         name = "subtotal_net",
@@ -229,9 +239,9 @@ public class InvoiceEntity {
     private BigDecimal totalGross =
         BigDecimal.ZERO;
 
-    /*
-     * XRechnung / ZUGFeRD
-     */
+    // ---------------------------------------------------------
+    // XRechnung / ZUGFeRD
+    // ---------------------------------------------------------
 
     @Column(
         name = "buyer_reference",
@@ -264,6 +274,12 @@ public class InvoiceEntity {
     private String deliveryNoteReference;
 
     @Column(
+        name = "customer_leitweg_id",
+        length = 100
+    )
+    private String customerLeitwegId;
+
+    @Column(
         name = "customer_electronic_address",
         length = 255
     )
@@ -285,7 +301,8 @@ public class InvoiceEntity {
         nullable = false,
         length = 10
     )
-    private String invoiceTypeCode = "380";
+    private String invoiceTypeCode =
+        "380";
 
     /**
      * 58 = SEPA Überweisung
@@ -295,7 +312,8 @@ public class InvoiceEntity {
         nullable = false,
         length = 10
     )
-    private String paymentMeansCode = "58";
+    private String paymentMeansCode =
+        "58";
 
     /**
      * S = Standard VAT
@@ -307,7 +325,8 @@ public class InvoiceEntity {
         nullable = false,
         length = 10
     )
-    private String taxCategoryCode = "S";
+    private String taxCategoryCode =
+        "S";
 
     /**
      * ISO 4217
@@ -317,37 +336,26 @@ public class InvoiceEntity {
         nullable = false,
         length = 3
     )
-    private String currencyCode = "EUR";
+    private String currencyCode =
+        "EUR";
 
-    /**
-     * Steuerpunkt
-     */
     @Column(
         name = "tax_point_date"
     )
     private LocalDate taxPointDate;
 
-    /**
-     * Zahlungsreferenz
-     */
     @Column(
         name = "payment_reference",
         length = 100
     )
     private String paymentReference;
 
-    /**
-     * Verkäuferreferenz
-     */
     @Column(
         name = "seller_reference",
         length = 100
     )
     private String sellerReference;
 
-    /**
-     * Business Process Identifier
-     */
     @Column(
         name = "business_process_id",
         length = 200
@@ -355,9 +363,6 @@ public class InvoiceEntity {
     private String businessProcessId =
         "urn:fdc:peppol.eu:2017:poacc:billing:01:1.0";
 
-    /**
-     * EN16931 / XRechnung Kennung
-     */
     @Column(
         name = "specification_identifier",
         length = 300
@@ -365,31 +370,19 @@ public class InvoiceEntity {
     private String specificationIdentifier =
         "urn:xeinkauf.de:kosit:xrechnung_3.0";
 
-    /**
-     * Leitweg-ID Snapshot
-     */
-    @Column(
-        name = "customer_leitweg_id",
-        length = 100
-    )
-    private String customerLeitwegId;
-
-//    @Column(
-//        name = "product_name",
-//        nullable = false,
-//        length = 200
-//    )
-//    private String productName;
-
-    /*
-     * Sonstiges
-     */
+    // ---------------------------------------------------------
+    // Sonstiges
+    // ---------------------------------------------------------
 
     @Column(
         name = "notes",
         length = 2000
     )
     private String notes;
+
+    // ---------------------------------------------------------
+    // Archivierung
+    // ---------------------------------------------------------
 
     @Column(
         name = "archived",
@@ -402,20 +395,35 @@ public class InvoiceEntity {
     )
     private LocalDateTime archivedAt;
 
+    @Column(
+        name = "archive_path",
+        length = 1000
+    )
+    private String archivePath;
+
+    // ---------------------------------------------------------
+    // Positionen
+    // ---------------------------------------------------------
+
     @OneToMany(
         mappedBy = "invoice",
         cascade = CascadeType.ALL,
         orphanRemoval = true,
         fetch = FetchType.LAZY
     )
-    @OrderBy("positionNumber ASC")
+    @OrderBy(
+        "positionNumber ASC"
+    )
     private List<InvoiceItemEntity> items =
         new ArrayList<>();
+
+    // ---------------------------------------------------------
+    // Helper
+    // ---------------------------------------------------------
 
     public void addItem(
         InvoiceItemEntity item
     ) {
-
         if (item == null) {
             return;
         }
@@ -427,7 +435,6 @@ public class InvoiceEntity {
     public void removeItem(
         InvoiceItemEntity item
     ) {
-
         if (item == null) {
             return;
         }
@@ -439,8 +446,9 @@ public class InvoiceEntity {
     public void replaceItems(
         List<InvoiceItemEntity> newItems
     ) {
-
-        for (InvoiceItemEntity existingItem : items) {
+        for (
+            InvoiceItemEntity existingItem : items
+        ) {
             existingItem.setInvoice(null);
         }
 
@@ -450,7 +458,9 @@ public class InvoiceEntity {
             return;
         }
 
-        for (InvoiceItemEntity item : newItems) {
+        for (
+            InvoiceItemEntity item : newItems
+        ) {
             addItem(item);
         }
     }

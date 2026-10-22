@@ -293,7 +293,190 @@ Historie
 ``
 ```
 realisieren.
+
+## 4. Komplettes empfohlenes Skript
+
+Vor dem Anlegen prüft dieses Skript, ob die jeweiligen Indizes bereits existieren:
 ```Code
+USE [Firma];
+GO
+
+
+/* ============================================================
+   INVOICE
+   ============================================================ */
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = N'IX_INVOICE_INVOICE_DATE'
+      AND object_id = OBJECT_ID(N'dbo.invoice')
+)
+BEGIN
+    CREATE INDEX [IX_INVOICE_INVOICE_DATE]
+    ON [dbo].[invoice] ([invoice_date]);
+END;
+GO
+
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = N'IX_INVOICE_CUSTOMER_ID'
+      AND object_id = OBJECT_ID(N'dbo.invoice')
+)
+BEGIN
+    CREATE INDEX [IX_INVOICE_CUSTOMER_ID]
+    ON [dbo].[invoice] ([customer_id]);
+END;
+GO
+
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = N'IX_INVOICE_COMPANY_ID'
+      AND object_id = OBJECT_ID(N'dbo.invoice')
+)
+BEGIN
+    CREATE INDEX [IX_INVOICE_COMPANY_ID]
+    ON [dbo].[invoice] ([company_id]);
+END;
+GO
+
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = N'IX_INVOICE_STATUS'
+      AND object_id = OBJECT_ID(N'dbo.invoice')
+)
+BEGIN
+    CREATE INDEX [IX_INVOICE_STATUS]
+    ON [dbo].[invoice] ([status]);
+END;
+GO
+
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = N'IX_INVOICE_ARCHIVED_INVOICE_DATE'
+      AND object_id = OBJECT_ID(N'dbo.invoice')
+)
+BEGIN
+    CREATE INDEX [IX_INVOICE_ARCHIVED_INVOICE_DATE]
+    ON [dbo].[invoice]
+    (
+        [archived],
+        [invoice_date]
+    )
+    INCLUDE
+    (
+        [invoice_number],
+        [archived_at],
+        [archive_path]
+    );
+END;
+GO
+
+
+/* ============================================================
+   INVOICE_ITEM
+   ============================================================ */
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = N'IX_INVOICE_ITEM_INVOICE_POSITION'
+      AND object_id = OBJECT_ID(N'dbo.invoice_item')
+)
+BEGIN
+    CREATE INDEX [IX_INVOICE_ITEM_INVOICE_POSITION]
+    ON [dbo].[invoice_item]
+    (
+        [invoice_id],
+        [position_number]
+    );
+END;
+GO
+
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = N'IX_INVOICE_ITEM_PRODUCT_ID'
+      AND object_id = OBJECT_ID(N'dbo.invoice_item')
+)
+BEGIN
+    CREATE INDEX [IX_INVOICE_ITEM_PRODUCT_ID]
+    ON [dbo].[invoice_item] ([product_id]);
+END;
+GO
+
+
+/* ============================================================
+   INVOICE_DOCUMENT_ARCHIVE
+   ============================================================ */
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = N'UX_INVOICE_DOCUMENT_ARCHIVE_INVOICE_ID'
+      AND object_id =
+          OBJECT_ID(N'dbo.invoice_document_archive')
+)
+BEGIN
+    CREATE UNIQUE INDEX
+        [UX_INVOICE_DOCUMENT_ARCHIVE_INVOICE_ID]
+    ON [dbo].[invoice_document_archive]
+        ([invoice_id]);
+END;
+GO
+
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE name =
+        N'UX_INVOICE_DOCUMENT_ARCHIVE_INVOICE_NUMBER'
+      AND object_id =
+          OBJECT_ID(N'dbo.invoice_document_archive')
+)
+BEGIN
+    CREATE UNIQUE INDEX
+        [UX_INVOICE_DOCUMENT_ARCHIVE_INVOICE_NUMBER]
+    ON [dbo].[invoice_document_archive]
+        ([invoice_number]);
+END;
+GO
+
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE name =
+        N'IX_INVOICE_DOCUMENT_ARCHIVE_ARCHIVED_AT'
+      AND object_id =
+          OBJECT_ID(N'dbo.invoice_document_archive')
+)
+BEGIN
+    CREATE INDEX
+        [IX_INVOICE_DOCUMENT_ARCHIVE_ARCHIVED_AT]
+    ON [dbo].[invoice_document_archive]
+        ([archived_at] DESC);
+END;
+GO
 ```
 
 

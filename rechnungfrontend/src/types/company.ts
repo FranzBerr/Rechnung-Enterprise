@@ -5,6 +5,10 @@ export interface Company {
 
   legalForm?: string;
 
+  taxNumber: string;
+
+  vatId: string;
+
   street: string;
 
   zipCode: string;
@@ -12,10 +16,6 @@ export interface Company {
   city: string;
 
   country: string;
-
-  taxNumber: string;
-
-  vatId: string;
 
   phone?: string;
 
@@ -27,18 +27,27 @@ export interface Company {
 }
 
 export interface CompanyRequest {
+  name: string;
 
-  companyName: string;
+  legalForm?: string | null;
+
+  taxNumber: string;
+
+  vatId: string;
 
   street: string;
 
-  postalCode: string;
+  zipCode: string;
 
   city: string;
 
   country: string;
 
-  taxNumber: string;
+  phone?: string  | null;
 
-  vatId: string;
+  email?: string | null;
+
+  website?: string  | null;
+
+  active: boolean;
 }

@@ -1,6 +1,8 @@
 package com.bcs.rechnung.invoice.document;
 
 import com.bcs.rechnung.exception.ResourceNotFoundException;
+import com.bcs.rechnung.invoice.InvoiceEntity;
+import com.bcs.rechnung.invoice.InvoiceRepository;
 import com.bcs.rechnung.invoice.document.dto.ArchivedDocumentDto;
 import com.bcs.rechnung.invoice.document.mapper.InvoiceDocumentArchiveMapper;
 import lombok.RequiredArgsConstructor;
@@ -38,8 +40,200 @@ public class InvoiceDocumentArchiveServiceImpl
         );
 
     private final InvoiceDocumentArchiveRepository repository;
-
     private final InvoiceDocumentArchiveMapper mapper;
+    private final InvoiceDocumentService invoiceDocumentService;
+    private final InvoiceRepository invoiceRepository;
+
+    // ---------------------------------------------------------
+    // Archivieren
+    // ---------------------------------------------------------
+
+    @Override
+    @Transactional
+    public ArchivedDocumentDto archive(
+        Long invoiceId
+    ) {
+        validateId(
+            invoiceId,
+            "Rechnungs-ID"
+        );
+
+        InvoiceEntity invoice =
+            findInvoice(invoiceId);
+
+        /*
+         * Bereits archiviert:
+         * Vorhandenes Archiv nicht neu erzeugen.
+         */
+        if (
+            Boolean.TRUE.equals(
+                invoice.getArchived()
+            )
+        ) {
+            InvoiceDocumentArchiveEntity archive =
+                findEntityByInvoiceId(invoiceId);
+
+            validateArchivedFiles(archive);
+
+            synchronizeInvoiceArchiveState(
+                invoice,
+                archive
+            );
+
+            return mapper.toDto(archive);
+        }
+
+        /*
+         * Archivdatensatz existiert bereits,
+         * InvoiceEntity ist aber noch nicht synchron.
+         */
+        if (
+            repository.existsByInvoiceId(
+                invoiceId
+            )
+        ) {
+            InvoiceDocumentArchiveEntity archive =
+                findEntityByInvoiceId(invoiceId);
+
+            validateArchivedFiles(archive);
+
+            synchronizeInvoiceArchiveState(
+                invoice,
+                archive
+            );
+
+            return mapper.toDto(archive);
+        }
+
+        /*
+         * Neue Archivierung.
+         *
+         * InvoiceDocumentService übernimmt:
+         *
+         * PDF
+         * XML
+         * KoSIT-Validierung
+         * validation-report.xml
+         * validator-console.log
+         * InvoiceDocumentArchiveEntity
+         */
+        invoiceDocumentService
+            .generateValidateAndArchive(
+                invoiceId
+            );
+
+        InvoiceDocumentArchiveEntity archive =
+            repository
+                .findByInvoiceId(invoiceId)
+                .orElseThrow(() ->
+                    new IllegalStateException(
+                        "Die Rechnung "
+                            + invoice.getInvoiceNumber()
+                            + " wurde verarbeitet, "
+                            + "aber es wurde kein "
+                            + "Archivdatensatz gespeichert."
+                    )
+                );
+
+        validateArchivedFiles(archive);
+
+        synchronizeInvoiceArchiveState(
+            invoice,
+            archive
+        );
+
+        return mapper.toDto(archive);
+    }
+
+    // ---------------------------------------------------------
+    // Archivierung rückgängig machen
+    // ---------------------------------------------------------
+
+    @Override
+    @Transactional
+    public void undoArchive(
+        Long invoiceId
+    ) {
+        validateId(
+            invoiceId,
+            "Rechnungs-ID"
+        );
+
+        InvoiceEntity invoice =
+            findInvoice(invoiceId);
+
+        if (
+            !Boolean.TRUE.equals(
+                invoice.getArchived()
+            )
+        ) {
+            throw new IllegalStateException(
+                "Die Rechnung "
+                    + invoice.getInvoiceNumber()
+                    + " ist nicht archiviert."
+            );
+        }
+
+        InvoiceDocumentArchiveEntity archive =
+            repository
+                .findByInvoiceId(invoiceId)
+                .orElseThrow(() ->
+                    new ResourceNotFoundException(
+                        "Für die Rechnung "
+                            + invoice.getInvoiceNumber()
+                            + " wurde kein "
+                            + "Archivdatensatz gefunden."
+                    )
+                );
+
+        /*
+         * Archivdatensatz löschen.
+         *
+         * Die physischen Dateien bleiben absichtlich
+         * erhalten.
+         */
+        repository.delete(archive);
+
+        invoice.setArchived(false);
+        invoice.setArchivedAt(null);
+        invoice.setArchivePath(null);
+
+        invoiceRepository.save(invoice);
+    }
+
+    // ---------------------------------------------------------
+    // Archivstatus
+    // ---------------------------------------------------------
+
+    @Override
+    public boolean isArchived(
+        Long invoiceId
+    ) {
+        validateId(
+            invoiceId,
+            "Rechnungs-ID"
+        );
+
+        InvoiceEntity invoice =
+            findInvoice(invoiceId);
+
+        if (
+            !Boolean.TRUE.equals(
+                invoice.getArchived()
+            )
+        ) {
+            return false;
+        }
+
+        return repository
+            .findByInvoiceId(invoiceId)
+            .map(this::areArchivedFilesAvailable)
+            .orElse(false);
+    }
+
+    // ---------------------------------------------------------
+    // Lesen
+    // ---------------------------------------------------------
 
     @Override
     public List<ArchivedDocumentDto> findAll() {
@@ -54,13 +248,8 @@ public class InvoiceDocumentArchiveServiceImpl
     public ArchivedDocumentDto findById(
         Long id
     ) {
-        InvoiceDocumentArchiveEntity entity =
-            findEntityById(
-                id
-            );
-
         return mapper.toDto(
-            entity
+            findEntityById(id)
         );
     }
 
@@ -68,13 +257,8 @@ public class InvoiceDocumentArchiveServiceImpl
     public ArchivedDocumentDto findByInvoiceId(
         Long invoiceId
     ) {
-        InvoiceDocumentArchiveEntity entity =
-            findEntityByInvoiceId(
-                invoiceId
-            );
-
         return mapper.toDto(
-            entity
+            findEntityByInvoiceId(invoiceId)
         );
     }
 
@@ -96,23 +280,24 @@ public class InvoiceDocumentArchiveServiceImpl
                     new ResourceNotFoundException(
                         "Für die Rechnungsnummer "
                             + normalizedInvoiceNumber
-                            + " wurde kein Archivdatensatz gefunden."
+                            + " wurde kein "
+                            + "Archivdatensatz gefunden."
                     )
                 );
 
-        return mapper.toDto(
-            entity
-        );
+        return mapper.toDto(entity);
     }
+
+    // ---------------------------------------------------------
+    // Downloads über Archiv-ID
+    // ---------------------------------------------------------
 
     @Override
     public ResponseEntity<Resource> downloadPdf(
         Long id
     ) {
         InvoiceDocumentArchiveEntity entity =
-            findEntityById(
-                id
-            );
+            findEntityById(id);
 
         return createFileDownloadResponse(
             entity.getPdfFile(),
@@ -126,9 +311,7 @@ public class InvoiceDocumentArchiveServiceImpl
         Long id
     ) {
         InvoiceDocumentArchiveEntity entity =
-            findEntityById(
-                id
-            );
+            findEntityById(id);
 
         return createFileDownloadResponse(
             entity.getXmlFile(),
@@ -142,9 +325,7 @@ public class InvoiceDocumentArchiveServiceImpl
         Long id
     ) {
         InvoiceDocumentArchiveEntity entity =
-            findEntityById(
-                id
-            );
+            findEntityById(id);
 
         return createFileDownloadResponse(
             entity.getValidationReport(),
@@ -158,9 +339,7 @@ public class InvoiceDocumentArchiveServiceImpl
         Long id
     ) {
         InvoiceDocumentArchiveEntity entity =
-            findEntityById(
-                id
-            );
+            findEntityById(id);
 
         return createFileDownloadResponse(
             entity.getValidatorLog(),
@@ -169,14 +348,16 @@ public class InvoiceDocumentArchiveServiceImpl
         );
     }
 
+    // ---------------------------------------------------------
+    // Downloads über Rechnungs-ID
+    // ---------------------------------------------------------
+
     @Override
     public ResponseEntity<Resource> downloadPdfByInvoiceId(
         Long invoiceId
     ) {
         InvoiceDocumentArchiveEntity entity =
-            findEntityByInvoiceId(
-                invoiceId
-            );
+            findEntityByInvoiceId(invoiceId);
 
         return createFileDownloadResponse(
             entity.getPdfFile(),
@@ -190,9 +371,7 @@ public class InvoiceDocumentArchiveServiceImpl
         Long invoiceId
     ) {
         InvoiceDocumentArchiveEntity entity =
-            findEntityByInvoiceId(
-                invoiceId
-            );
+            findEntityByInvoiceId(invoiceId);
 
         return createFileDownloadResponse(
             entity.getXmlFile(),
@@ -207,9 +386,7 @@ public class InvoiceDocumentArchiveServiceImpl
         Long invoiceId
     ) {
         InvoiceDocumentArchiveEntity entity =
-            findEntityByInvoiceId(
-                invoiceId
-            );
+            findEntityByInvoiceId(invoiceId);
 
         return createFileDownloadResponse(
             entity.getValidationReport(),
@@ -224,9 +401,7 @@ public class InvoiceDocumentArchiveServiceImpl
         Long invoiceId
     ) {
         InvoiceDocumentArchiveEntity entity =
-            findEntityByInvoiceId(
-                invoiceId
-            );
+            findEntityByInvoiceId(invoiceId);
 
         return createFileDownloadResponse(
             entity.getValidatorLog(),
@@ -235,17 +410,16 @@ public class InvoiceDocumentArchiveServiceImpl
         );
     }
 
+    // ---------------------------------------------------------
+    // ZIP
+    // ---------------------------------------------------------
+
     @Override
     public ResponseEntity<Resource> downloadZip(
         Long id
     ) {
-        InvoiceDocumentArchiveEntity entity =
-            findEntityById(
-                id
-            );
-
         return createZipDownloadResponse(
-            entity
+            findEntityById(id)
         );
     }
 
@@ -253,15 +427,32 @@ public class InvoiceDocumentArchiveServiceImpl
     public ResponseEntity<Resource> downloadZipByInvoiceId(
         Long invoiceId
     ) {
-        InvoiceDocumentArchiveEntity entity =
-            findEntityByInvoiceId(
-                invoiceId
-            );
-
         return createZipDownloadResponse(
-            entity
+            findEntityByInvoiceId(invoiceId)
         );
     }
+
+    // ---------------------------------------------------------
+    // Invoice
+    // ---------------------------------------------------------
+
+    private InvoiceEntity findInvoice(
+        Long invoiceId
+    ) {
+        return invoiceRepository
+            .findById(invoiceId)
+            .orElseThrow(() ->
+                new ResourceNotFoundException(
+                    "Rechnung mit ID "
+                        + invoiceId
+                        + " wurde nicht gefunden."
+                )
+            );
+    }
+
+    // ---------------------------------------------------------
+    // Archive Entity
+    // ---------------------------------------------------------
 
     private InvoiceDocumentArchiveEntity findEntityById(
         Long id
@@ -272,9 +463,7 @@ public class InvoiceDocumentArchiveServiceImpl
         );
 
         return repository
-            .findById(
-                id
-            )
+            .findById(id)
             .orElseThrow(() ->
                 new ResourceNotFoundException(
                     "Archivdatensatz mit ID "
@@ -293,17 +482,159 @@ public class InvoiceDocumentArchiveServiceImpl
         );
 
         return repository
-            .findByInvoiceId(
-                invoiceId
-            )
+            .findByInvoiceId(invoiceId)
             .orElseThrow(() ->
                 new ResourceNotFoundException(
                     "Für die Rechnung mit ID "
                         + invoiceId
-                        + " wurde kein Archivdatensatz gefunden."
+                        + " wurde kein "
+                        + "Archivdatensatz gefunden."
                 )
             );
     }
+
+    // ---------------------------------------------------------
+    // Vollständigkeit des Archivs
+    // ---------------------------------------------------------
+
+    private void validateArchivedFiles(
+        InvoiceDocumentArchiveEntity entity
+    ) {
+        resolveRequiredFile(
+            entity.getPdfFile(),
+            "PDF-Datei"
+        );
+
+        resolveRequiredFile(
+            entity.getXmlFile(),
+            "XRechnung-XML"
+        );
+
+        resolveRequiredFile(
+            entity.getValidationReport(),
+            "KoSIT-Prüfbericht"
+        );
+
+        resolveRequiredFile(
+            entity.getValidatorLog(),
+            "Validator-Protokoll"
+        );
+    }
+
+    private boolean areArchivedFilesAvailable(
+        InvoiceDocumentArchiveEntity entity
+    ) {
+        return isRegularReadableFile(
+            entity.getPdfFile()
+        )
+            && isRegularReadableFile(
+            entity.getXmlFile()
+        )
+            && isRegularReadableFile(
+            entity.getValidationReport()
+        )
+            && isRegularReadableFile(
+            entity.getValidatorLog()
+        );
+    }
+
+    private boolean isRegularReadableFile(
+        String filePath
+    ) {
+        if (
+            filePath == null
+                || filePath.isBlank()
+        ) {
+            return false;
+        }
+
+        try {
+            Path path =
+                Path.of(filePath)
+                    .toAbsolutePath()
+                    .normalize();
+
+            return Files.isRegularFile(path)
+                && Files.isReadable(path);
+
+        } catch (InvalidPathException exception) {
+            return false;
+        }
+    }
+
+    // ---------------------------------------------------------
+    // Invoice Archivstatus synchronisieren
+    // ---------------------------------------------------------
+
+    private void synchronizeInvoiceArchiveState(
+        InvoiceEntity invoice,
+        InvoiceDocumentArchiveEntity archive
+    ) {
+        String archiveDirectory =
+            normalizeArchiveDirectory(
+                archive.getArchiveDirectory()
+            );
+
+        boolean changed =
+            !Boolean.TRUE.equals(
+                invoice.getArchived()
+            )
+                || invoice.getArchivedAt() == null
+                || !archiveDirectory.equals(
+                invoice.getArchivePath()
+            );
+
+        if (!changed) {
+            return;
+        }
+
+        invoice.setArchived(true);
+
+        invoice.setArchivedAt(
+            archive.getArchivedAt()
+        );
+
+        invoice.setArchivePath(
+            archiveDirectory
+        );
+
+        invoiceRepository.save(invoice);
+    }
+
+    private String normalizeArchiveDirectory(
+        String archiveDirectory
+    ) {
+        if (
+            archiveDirectory == null
+                || archiveDirectory.isBlank()
+        ) {
+            throw new IllegalStateException(
+                "Im Archivdatensatz ist kein "
+                    + "Archivverzeichnis gespeichert."
+            );
+        }
+
+        try {
+            return Path.of(
+                    archiveDirectory
+                )
+                .toAbsolutePath()
+                .normalize()
+                .toString();
+
+        } catch (InvalidPathException exception) {
+            throw new IllegalStateException(
+                "Das gespeicherte Archivverzeichnis "
+                    + "ist ungültig: "
+                    + archiveDirectory,
+                exception
+            );
+        }
+    }
+
+    // ---------------------------------------------------------
+    // Einzeldatei-Download
+    // ---------------------------------------------------------
 
     private ResponseEntity<Resource> createFileDownloadResponse(
         String filePath,
@@ -357,33 +688,32 @@ public class InvoiceDocumentArchiveServiceImpl
                     HttpHeaders.CONTENT_DISPOSITION,
                     contentDisposition.toString()
                 )
-                .contentType(
-                    mediaType
-                )
+                .contentType(mediaType)
                 .contentLength(
                     Files.size(path)
                 )
-                .body(
-                    resource
-                );
+                .body(resource);
 
         } catch (IOException exception) {
             throw new IllegalStateException(
                 documentType
-                    + " konnte nicht für den Download geöffnet werden: "
+                    + " konnte nicht für den Download "
+                    + "geöffnet werden: "
                     + path,
                 exception
             );
         }
     }
 
+    // ---------------------------------------------------------
+    // ZIP-Download
+    // ---------------------------------------------------------
+
     private ResponseEntity<Resource> createZipDownloadResponse(
         InvoiceDocumentArchiveEntity entity
     ) {
         byte[] zipContent =
-            createZipContent(
-                entity
-            );
+            createZipContent(entity);
 
         String invoiceNumber =
             normalizeInvoiceNumber(
@@ -415,20 +745,19 @@ public class InvoiceDocumentArchiveServiceImpl
                 HttpHeaders.CONTENT_DISPOSITION,
                 contentDisposition.toString()
             )
-            .contentType(
-                ZIP_MEDIA_TYPE
-            )
+            .contentType(ZIP_MEDIA_TYPE)
             .contentLength(
                 zipContent.length
             )
-            .body(
-                resource
-            );
+            .body(resource);
     }
 
     private byte[] createZipContent(
         InvoiceDocumentArchiveEntity entity
     ) {
+        /*
+         * Alle vier Dateien sind für das Rechnungsarchiv Pflicht.
+         */
         Path pdfFile =
             resolveRequiredFile(
                 entity.getPdfFile(),
@@ -448,7 +777,7 @@ public class InvoiceDocumentArchiveServiceImpl
             );
 
         Path validatorLog =
-            resolveOptionalFile(
+            resolveRequiredFile(
                 entity.getValidatorLog(),
                 "Validator-Protokoll"
             );
@@ -484,13 +813,11 @@ public class InvoiceDocumentArchiveServiceImpl
                 entryNames
             );
 
-            if (validatorLog != null) {
-                addFileToZip(
-                    zipStream,
-                    validatorLog,
-                    entryNames
-                );
-            }
+            addFileToZip(
+                zipStream,
+                validatorLog,
+                entryNames
+            );
 
             zipStream.finish();
 
@@ -520,14 +847,13 @@ public class InvoiceDocumentArchiveServiceImpl
             throw new IllegalStateException(
                 "Der Dateiname "
                     + entryName
-                    + " ist im ZIP-Archiv mehrfach vorhanden."
+                    + " ist im ZIP-Archiv "
+                    + "mehrfach vorhanden."
             );
         }
 
         ZipEntry zipEntry =
-            new ZipEntry(
-                entryName
-            );
+            new ZipEntry(entryName);
 
         zipEntry.setTime(
             Files.getLastModifiedTime(file)
@@ -546,6 +872,10 @@ public class InvoiceDocumentArchiveServiceImpl
         zipStream.closeEntry();
     }
 
+    // ---------------------------------------------------------
+    // Pfade
+    // ---------------------------------------------------------
+
     private Path resolveRequiredFile(
         String filePath,
         String documentType
@@ -559,7 +889,8 @@ public class InvoiceDocumentArchiveServiceImpl
         if (!Files.isRegularFile(path)) {
             throw new ResourceNotFoundException(
                 documentType
-                    + " wurde im Dateisystem nicht gefunden: "
+                    + " wurde im Dateisystem "
+                    + "nicht gefunden: "
                     + path
             );
         }
@@ -575,29 +906,14 @@ public class InvoiceDocumentArchiveServiceImpl
         return path;
     }
 
-    private Path resolveOptionalFile(
-        String filePath,
-        String documentType
-    ) {
-        if (filePath == null
-            || filePath.isBlank()) {
-
-            return null;
-        }
-
-        return resolveRequiredFile(
-            filePath,
-            documentType
-        );
-    }
-
     private Path resolvePath(
         String filePath,
         String documentType
     ) {
-        if (filePath == null
-            || filePath.isBlank()) {
-
+        if (
+            filePath == null
+                || filePath.isBlank()
+        ) {
             throw new ResourceNotFoundException(
                 "Für den Archivdatensatz ist kein Pfad für "
                     + documentType
@@ -623,15 +939,18 @@ public class InvoiceDocumentArchiveServiceImpl
         }
     }
 
+    // ---------------------------------------------------------
+    // Hilfsmethoden
+    // ---------------------------------------------------------
+
     private String createSafeZipFileName(
         String invoiceNumber
     ) {
         String safeInvoiceNumber =
-            invoiceNumber
-                .replaceAll(
-                    "[\\\\/:*?\"<>|]",
-                    "-"
-                );
+            invoiceNumber.replaceAll(
+                "[\\\\/:*?\"<>|]",
+                "-"
+            );
 
         return safeInvoiceNumber
             + ".zip";
@@ -640,9 +959,10 @@ public class InvoiceDocumentArchiveServiceImpl
     private String normalizeInvoiceNumber(
         String invoiceNumber
     ) {
-        if (invoiceNumber == null
-            || invoiceNumber.isBlank()) {
-
+        if (
+            invoiceNumber == null
+                || invoiceNumber.isBlank()
+        ) {
             throw new IllegalArgumentException(
                 "Die Rechnungsnummer darf nicht leer sein."
             );
@@ -655,9 +975,10 @@ public class InvoiceDocumentArchiveServiceImpl
         Long id,
         String fieldName
     ) {
-        if (id == null
-            || id <= 0) {
-
+        if (
+            id == null
+                || id <= 0
+        ) {
             throw new IllegalArgumentException(
                 fieldName
                     + " muss größer als 0 sein."

@@ -6,6 +6,7 @@ spring:
     url: jdbc:sqlserver://localhost:1433;databaseName=Firma;encrypt=true;trustServerCertificate=true
     username: sa
     password: ffbberr$1
+    driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
 
   jpa:
     open-in-view: false
@@ -13,8 +14,19 @@ spring:
     hibernate:
       ddl-auto: validate
 
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.SQLServerDialect
+        format_sql: true
+
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+
+
 server:
   port: 8080
+
 
 springdoc:
   api-docs:
@@ -27,11 +39,14 @@ springdoc:
     tags-sorter: alpha
     try-it-out-enabled: true
 
+
 xrechnung:
-  output-directory: 'C:\PolyRackDummy\Rechning gesamt\Rechnung-Enterprise-formatiert\Rechnung-Enterprise\xrechnung'
+  output-directory: "C:/PolyRackDummy/Rechning gesamt/Rechnung-Enterprise-formatiert/Rechnung-Enterprise/xrechnung"
+
 
 pdf:
-  output-directory: 'C:\PolyRackDummy\Rechning gesamt\Rechnung-Enterprise-formatiert\Rechnung-Enterprise\pdf'
+  output-directory: "C:/PolyRackDummy/Rechning gesamt/Rechnung-Enterprise-formatiert/Rechnung-Enterprise/pdf"
+
 
 invoice-documents:
   archive-directory: "C:/PolyRackDummy/Rechning gesamt/Rechnung-Enterprise-formatiert/Rechnung-Enterprise/archive"
@@ -45,3 +60,15 @@ invoice-documents:
   validator-repository: "C:/PolyRackDummy/Rechning gesamt/Rechnung-Enterprise-formatiert/Rechnung-Enterprise/XRechnungValidator"
 
   validator-timeout-seconds: 180
+
+
+app:
+  document:
+    archive:
+      directory: "C:/PolyRackDummy/Rechning gesamt/Rechnung-Enterprise-formatiert/Rechnung-Enterprise/archive"
+
+
+logging:
+  level:
+    org.hibernate.SQL: INFO
+    org.hibernate.orm.jdbc.bind: INFO
