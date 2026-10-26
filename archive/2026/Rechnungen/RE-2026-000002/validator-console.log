@@ -1,0 +1,34 @@
+KoSIT Validator version 1.6.3
+Loading scenarios from  file:///C:/PolyRackDummy/Rechning%20gesamt/Rechnung-Enterprise-formatiert/Rechnung-Enterprise/XRechnungValidator/scenarios.xml
+Using repository  file:///C:/PolyRackDummy/Rechning%20gesamt/Rechnung-Enterprise-formatiert/Rechnung-Enterprise/XRechnungValidator/
+
+Loaded "Validator Configuration XRechnung 3.0.2" by Coordination Office for IT Standards (KoSIT) from 2026-09-02 
+The following scenarios are available:
+  * EN16931 XRechnung (UBL Invoice)
+  * EN16931 XRechnung Extension (UBL Invoice)
+  * EN16931 XRechnung CVD (UBL Invoice)
+  * EN16931 XRechnung (UBL CreditNote)
+  * EN16931 XRechnung CVD (UBL CreditNote)
+  * EN16931 XRechnung (CII)
+  * EN16931 XRechnung Extension (CII)
+  * EN16931 XRechnung CVD (CII)
+  * EN16931 (UBL Invoice)
+  * EN16931 (UBL CreditNote)
+  * EN16931 (CII)
+
+
+Processing of 1 objects started
+Processing of 1 objects completed in 336ms
+Results:
+----------------------------------------------------------------------------------------------------------------
+|File                                                        |Schema |Schematron|Acceptance|Error/Description   |
+|/C:/PolyRackDummy/Rechning%20gesamt/Rechnung-Enterprise-f...|   Y   |    Y     |ACCEPTABLE|                    |
+|atiert/Rechnung-Enterprise/temp/RE-2026-000002-774abd85-710e|       |          |          |                    |
+|-4d5e-b8b9-2f9ca9f8a258/RE-2026-000002.xml                  |       |          |          |                    |
+----------------------------------------------------------------------------------------------------------------
+Acceptable:  1  Rejected:  0
+
+
+##############################
+#   Validation successful!   #
+##############################

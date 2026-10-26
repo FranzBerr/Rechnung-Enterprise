@@ -3,7 +3,8 @@ import axiosInstance from "./axiosInstance";
 import type {
   BankAccount,
   BankAccountRequest,
-} from "../types/bankAccount";
+} from "../types";
+import {BankAccountDto} from "../bankAccount/dto/BankAccountDto";
 
 
 class BankAccountApi {
@@ -11,10 +12,10 @@ class BankAccountApi {
   private readonly baseUrl =
     "/bank-accounts";
 
-  async findAll(): Promise<BankAccount[]> {
+  async findAll(): Promise<BankAccountDto[]> {
 
     const response =
-      await axiosInstance.get<BankAccount[]>(
+      await axiosInstance.get<BankAccountDto[]>(
         this.baseUrl
       );
 
@@ -23,10 +24,10 @@ class BankAccountApi {
 
   async findById(
     id: number
-  ): Promise<BankAccount> {
+  ): Promise<BankAccountDto> {
 
     const response =
-      await axiosInstance.get<BankAccount>(
+      await axiosInstance.get<BankAccountDto>(
         `${this.baseUrl}/${id}`
       );
 
@@ -35,10 +36,10 @@ class BankAccountApi {
 
   async create(
     request: BankAccountRequest
-  ): Promise<BankAccount> {
+  ): Promise<BankAccountDto> {
 
     const response =
-      await axiosInstance.post<BankAccount>(
+      await axiosInstance.post<BankAccountDto>(
         this.baseUrl,
         request
       );
@@ -49,10 +50,10 @@ class BankAccountApi {
   async update(
     id: number,
     request: BankAccountRequest
-  ): Promise<BankAccount> {
+  ): Promise<BankAccountDto> {
 
     const response =
-      await axiosInstance.put<BankAccount>(
+      await axiosInstance.put<BankAccountDto>(
         `${this.baseUrl}/${id}`,
         request
       );
@@ -69,10 +70,10 @@ class BankAccountApi {
     );
   }
 
-  async findDefault(): Promise<BankAccount> {
+  async findDefault(): Promise<BankAccountDto> {
 
     const response =
-      await axiosInstance.get<BankAccount>(
+      await axiosInstance.get<BankAccountDto>(
         `${this.baseUrl}/default`
       );
 
@@ -81,10 +82,10 @@ class BankAccountApi {
 
   async activate(
     id: number
-  ): Promise<BankAccount> {
+  ): Promise<BankAccountDto> {
 
     const response =
-      await axiosInstance.put<BankAccount>(
+      await axiosInstance.put<BankAccountDto>(
         `${this.baseUrl}/${id}/activate`
       );
 
@@ -93,10 +94,10 @@ class BankAccountApi {
 
   async deactivate(
     id: number
-  ): Promise<BankAccount> {
+  ): Promise<BankAccountDto> {
 
     const response =
-      await axiosInstance.put<BankAccount>(
+      await axiosInstance.put<BankAccountDto>(
         `${this.baseUrl}/${id}/deactivate`
       );
 

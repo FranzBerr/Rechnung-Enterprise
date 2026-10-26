@@ -11,11 +11,13 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -26,24 +28,67 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+@Entity
+@Table(
+    name = "offer",
+    uniqueConstraints = {
+        @UniqueConstraint(
+            name = "UK_OFFER_NUMBER",
+            columnNames = {
+                "offer_number"
+            }
+        )
+    },
+    indexes = {
+        @Index(
+            name = "IX_OFFER_COMPANY_ID",
+            columnList = "company_id"
+        ),
+        @Index(
+            name = "IX_OFFER_CUSTOMER_ID",
+            columnList = "customer_id"
+        ),
+        @Index(
+            name = "IX_OFFER_OFFER_DATE",
+            columnList = "offer_date"
+        ),
+        @Index(
+            name = "IX_OFFER_STATUS",
+            columnList = "status"
+        ),
+        @Index(
+            name = "IX_OFFER_ARCHIVED",
+            columnList = "archived"
+        )
+    }
+)
 @Getter
 @Setter
 @NoArgsConstructor
-@Entity
-@Table(name = "offer")
 public class OfferEntity {
+
+    // ---------------------------------------------------------
+    // Primärschlüssel
+    // ---------------------------------------------------------
 
     @Id
     @GeneratedValue(
         strategy = GenerationType.IDENTITY
     )
+    @Column(
+        name = "id"
+    )
     private Long id;
+
+
+    // ---------------------------------------------------------
+    // Angebotsnummer und Datum
+    // ---------------------------------------------------------
 
     @Column(
         name = "offer_number",
         nullable = false,
-        length = 30,
-        unique = true
+        length = 50
     )
     private String offerNumber;
 
@@ -58,17 +103,25 @@ public class OfferEntity {
     )
     private LocalDate validUntil;
 
-    @Enumerated(EnumType.STRING)
+
+    // ---------------------------------------------------------
+    // Status
+    // ---------------------------------------------------------
+
+    @Enumerated(
+        EnumType.STRING
+    )
     @Column(
         name = "status",
         nullable = false,
-        length = 30
+        length = 40
     )
     private OfferStatus status =
         OfferStatus.DRAFT;
 
+
     // ---------------------------------------------------------
-    // Beziehungen
+    // Firma
     // ---------------------------------------------------------
 
     @ManyToOne(
@@ -81,6 +134,11 @@ public class OfferEntity {
     )
     private CompanyEntity company;
 
+
+    // ---------------------------------------------------------
+    // Kunde
+    // ---------------------------------------------------------
+
     @ManyToOne(
         fetch = FetchType.LAZY,
         optional = false
@@ -91,39 +149,40 @@ public class OfferEntity {
     )
     private CustomerEntity customer;
 
+
     // ---------------------------------------------------------
-    // Snapshot Kundendaten
+    // Kundensnapshot
     // ---------------------------------------------------------
 
     @Column(
         name = "customer_number",
         nullable = false,
-        length = 30
+        length = 50
     )
     private String customerNumber;
 
     @Column(
         name = "customer_name",
         nullable = false,
-        length = 200
+        length = 255
     )
     private String customerName;
 
     @Column(
         name = "customer_contact_person",
-        length = 200
+        length = 255
     )
     private String customerContactPerson;
 
     @Column(
         name = "customer_department",
-        length = 200
+        length = 255
     )
     private String customerDepartment;
 
     @Column(
         name = "customer_street",
-        length = 200
+        length = 255
     )
     private String customerStreet;
 
@@ -135,7 +194,7 @@ public class OfferEntity {
 
     @Column(
         name = "customer_city",
-        length = 100
+        length = 255
     )
     private String customerCity;
 
@@ -151,8 +210,9 @@ public class OfferEntity {
     )
     private String customerVatId;
 
+
     // ---------------------------------------------------------
-    // Angebotseinstellungen
+    // Zahlungsdaten
     // ---------------------------------------------------------
 
     @Column(
@@ -164,13 +224,14 @@ public class OfferEntity {
         "EUR";
 
     @Column(
-        name = "payment_term_days",
-        nullable = false
+        name = "payment_term_days"
     )
-    private Integer paymentTermDays = 14;
+    private Integer paymentTermDays =
+        14;
+
 
     // ---------------------------------------------------------
-    // Summen
+    // Angebotssummen
     // ---------------------------------------------------------
 
     @Column(
@@ -200,47 +261,47 @@ public class OfferEntity {
     private BigDecimal totalGross =
         BigDecimal.ZERO;
 
+
     // ---------------------------------------------------------
-    // Texte
+    // Angebotstexte
     // ---------------------------------------------------------
 
     @Column(
         name = "introduction_text",
-        length = 2000
+        columnDefinition = "nvarchar(max)"
     )
     private String introductionText;
 
     @Column(
         name = "closing_text",
-        length = 2000
+        columnDefinition = "nvarchar(max)"
     )
     private String closingText;
 
     @Column(
         name = "notes",
-        length = 2000
+        columnDefinition = "nvarchar(max)"
     )
     private String notes;
 
+
     // ---------------------------------------------------------
-    // Aktiv
+    // Statusfelder
     // ---------------------------------------------------------
 
     @Column(
         name = "active",
         nullable = false
     )
-    private boolean active = true;
-
-    // ---------------------------------------------------------
-    // Archivierung
-    // ---------------------------------------------------------
+    private boolean active =
+        true;
 
     @Column(
         name = "archived",
         nullable = false
     )
-    private boolean archived = false;
+    private boolean archived =
+        false;
 
     @Column(
         name = "archived_at"
@@ -253,65 +314,146 @@ public class OfferEntity {
     )
     private String archivePath;
 
+
     // ---------------------------------------------------------
-    // Positionen
+    // Angebotspositionen
     // ---------------------------------------------------------
 
     @OneToMany(
         mappedBy = "offer",
         cascade = CascadeType.ALL,
-        orphanRemoval = true,
-        fetch = FetchType.LAZY
+        orphanRemoval = true
     )
-    @OrderBy("positionNumber ASC")
+    @OrderBy(
+        "positionNumber ASC"
+    )
     private List<OfferItemEntity> items =
         new ArrayList<>();
 
+
     // ---------------------------------------------------------
-    // Helper
+    // Position hinzufügen
     // ---------------------------------------------------------
 
     public void addItem(
         OfferItemEntity item
     ) {
+
         if (item == null) {
             return;
         }
 
-        item.setOffer(this);
-        items.add(item);
+        items.add(
+            item
+        );
+
+        item.setOffer(
+            this
+        );
     }
+
+
+    // ---------------------------------------------------------
+    // Position entfernen
+    // ---------------------------------------------------------
 
     public void removeItem(
         OfferItemEntity item
     ) {
+
         if (item == null) {
             return;
         }
 
-        items.remove(item);
-        item.setOffer(null);
+        boolean removed =
+            items.remove(
+                item
+            );
+
+        if (removed) {
+            item.setOffer(
+                null
+            );
+        }
     }
+
+
+    // ---------------------------------------------------------
+    // Alle Positionen entfernen
+    // ---------------------------------------------------------
+
+    public void clearItems() {
+
+        for (
+            OfferItemEntity item :
+            items
+        ) {
+            item.setOffer(
+                null
+            );
+        }
+
+        items.clear();
+    }
+
+
+    // ---------------------------------------------------------
+    // Positionen ersetzen
+    // ---------------------------------------------------------
 
     public void replaceItems(
         List<OfferItemEntity> newItems
     ) {
-        for (
-            OfferItemEntity existingItem : items
-        ) {
-            existingItem.setOffer(null);
-        }
 
-        items.clear();
+        clearItems();
 
         if (newItems == null) {
             return;
         }
 
         for (
-            OfferItemEntity item : newItems
+            OfferItemEntity item :
+            newItems
         ) {
-            addItem(item);
+            addItem(
+                item
+            );
         }
+    }
+
+
+    // ---------------------------------------------------------
+    // Archivieren
+    // ---------------------------------------------------------
+
+    public void archive(
+        String archivePath
+    ) {
+
+        this.archived =
+            true;
+
+        this.archivedAt =
+            LocalDateTime.now();
+
+        this.archivePath =
+            archivePath;
+    }
+
+
+    // ---------------------------------------------------------
+    // Archivierung zurücksetzen
+    // ---------------------------------------------------------
+
+    public void undoArchive() {
+
+        this.archived =
+            false;
+
+        this.archivedAt =
+            null;
+
+        this.archivePath =
+            null;
     }
 }

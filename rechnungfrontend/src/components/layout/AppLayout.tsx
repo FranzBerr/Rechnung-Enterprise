@@ -1,9 +1,16 @@
-import type { ReactNode } from "react";
+import type {
+  ReactNode,
+} from "react";
 
-import { Box } from "@mui/material";
+import {
+  Box,
+} from "@mui/material";
 
 import Header from "./Header";
 import Sidebar from "./Sidebar";
+
+const HEADER_HEIGHT = 64;
+const SIDEBAR_WIDTH = 260;
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -15,26 +22,34 @@ export default function AppLayout({
   return (
     <Box
       sx={{
-        display: "flex",
-        flexDirection: "column",
         minHeight: "100vh",
+        bgcolor: "background.default",
       }}
     >
-      <Header />
+      <Header
+        height={HEADER_HEIGHT}
+      />
+
+      <Sidebar
+        headerHeight={HEADER_HEIGHT}
+        width={SIDEBAR_WIDTH}
+      />
 
       <Box
+        component="main"
         sx={{
-          display: "flex",
-          flexGrow: 1,
+          ml: `${SIDEBAR_WIDTH}px`,
+          pt: `${HEADER_HEIGHT}px`,
+          minHeight: "100vh",
+          bgcolor: "background.default",
         }}
       >
-        <Sidebar />
-
         <Box
-          component="main"
           sx={{
-            flexGrow: 1,
-            p: 3,
+            p: {
+              xs: 2,
+              md: 3,
+            },
           }}
         >
           {children}

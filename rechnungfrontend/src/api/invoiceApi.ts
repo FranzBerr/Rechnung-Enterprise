@@ -1,9 +1,11 @@
 import axiosInstance from "./axiosInstance";
+import {InvoiceDto} from "../types/invoice/InvoiceDto";
+import {InvoiceRequest} from "../types/invoice/InvoiceRequest";
 
-import type {
-  InvoiceDto,
-  InvoiceRequest,
-} from "../types/invoice";
+// import type {
+//   InvoiceDto,
+//   InvoiceRequest,
+// } from "../types/invoice";
 
 export const invoiceApi = {
   async findAll(): Promise<InvoiceDto[]> {

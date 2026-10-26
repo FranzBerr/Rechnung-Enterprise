@@ -36,6 +36,10 @@ public record ProductRequest(
     @DecimalMin("0.00")
     BigDecimal netPrice,
 
+    @NotNull
+    @DecimalMin("0.00")
+    BigDecimal vatRate,
+
     boolean active
 ) {
 }
