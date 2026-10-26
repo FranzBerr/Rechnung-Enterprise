@@ -24,6 +24,8 @@ public record ProductDto(
 
     BigDecimal netPrice,
 
+    BigDecimal vatRate,
+
     boolean active
 ) {
 }

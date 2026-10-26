@@ -1,98 +1,64 @@
 import {
   AppBar,
   Box,
-  Button,
   Toolbar,
   Typography,
 } from "@mui/material";
 
-import {
-  Link,
-  useLocation,
-} from "react-router-dom";
-
-interface MenuItem {
-  label: string;
-  path: string;
+interface HeaderProps {
+  height: number;
 }
 
-const menuItems: MenuItem[] = [
-  {
-    label: "Dashboard",
-    path: "/dashboard",
-  },
-  {
-    label: "Firmen",
-    path: "/companies",
-  },
-  {
-    label: "Kunden",
-    path: "/customers",
-  },
-  {
-    label: "Banken",
-    path: "/banks",
-  },
-  {
-    label: "Bankkonten",
-    path: "/bank-accounts",
-  },
-  {
-    label: "Produkte",
-    path: "/products",
-  },
-  {
-    label: "Rechnungen",
-    path: "/invoices",
-  },
-];
-
-export default function Header() {
-  const location = useLocation();
-
-  const isActive = (path: string) =>
-    location.pathname === path;
-
+export default function Header({
+                                 height,
+                               }: HeaderProps) {
   return (
-    <AppBar position="static">
-      <Toolbar>
+    <AppBar
+      position="fixed"
+      elevation={1}
+      sx={{
+        zIndex: (theme) =>
+          theme.zIndex.drawer + 1,
+      }}
+    >
+      <Toolbar
+        sx={{
+          minHeight: `${height}px !important`,
+          px: 3,
+          justifyContent: "space-between",
+        }}
+      >
+        <Box>
+          <Typography
+            variant="h6"
+            component="div"
+            sx={{
+              fontWeight: 700,
+              lineHeight: 1.2,
+            }}
+          >
+            Rechnung Enterprise
+          </Typography>
 
-        <Typography
-          variant="h6"
-          sx={{ mr: 4 }}
-        >
-          Rechnung Enterprise
-        </Typography>
-
-        <Box
-          sx={{
-            display: "flex",
-            gap: 1,
-            flexGrow: 1,
-          }}
-        >
-          {menuItems.map((item) => (
-            <Button
-              key={item.path}
-              component={Link}
-              to={item.path}
-              color="inherit"
-              sx={{
-                textTransform: "none",
-                bgcolor: isActive(item.path)
-                  ? "rgba(255,255,255,0.20)"
-                  : "transparent",
-              }}
-            >
-              {item.label}
-            </Button>
-          ))}
+          <Typography
+            variant="caption"
+            sx={{
+              color:
+                "rgba(255,255,255,0.75)",
+            }}
+          >
+            Rechnungen, Angebote und Lieferscheine
+          </Typography>
         </Box>
 
-        <Typography variant="body2">
+        <Typography
+          variant="body2"
+          sx={{
+            fontWeight: 600,
+          }}
+        >
           BCS GmbH
         </Typography>
-
       </Toolbar>
     </AppBar>
   );

@@ -15,12 +15,14 @@ import com.bcs.rechnung.offer.mapper.OfferMapper;
 import com.bcs.rechnung.offer.repository.OfferRepository;
 import com.bcs.rechnung.product.ProductEntity;
 import com.bcs.rechnung.product.ProductRepository;
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -31,9 +33,11 @@ import java.util.Set;
 public class OfferServiceImpl
     implements OfferService {
 
-    private static final int MONEY_SCALE = 2;
+    private static final int MONEY_SCALE =
+        2;
 
-    private static final int CALCULATION_SCALE = 8;
+    private static final int CALCULATION_SCALE =
+        8;
 
     private static final RoundingMode ROUNDING_MODE =
         RoundingMode.HALF_UP;
@@ -47,6 +51,12 @@ public class OfferServiceImpl
     private static final int DEFAULT_PAYMENT_TERM_DAYS =
         14;
 
+    private static final String OFFER_NUMBER_PREFIX =
+        "AN";
+
+    private static final int OFFER_NUMBER_LENGTH =
+        6;
+
     private final OfferRepository offerRepository;
 
     private final CompanyRepository companyRepository;
@@ -56,6 +66,9 @@ public class OfferServiceImpl
     private final ProductRepository productRepository;
 
     private final OfferMapper offerMapper;
+
+    private final EntityManager entityManager;
+
 
     // ---------------------------------------------------------
     // Lesen
@@ -71,6 +84,7 @@ public class OfferServiceImpl
         );
     }
 
+
     @Override
     @Transactional(readOnly = true)
     public OfferDto findById(
@@ -78,9 +92,12 @@ public class OfferServiceImpl
     ) {
 
         return offerMapper.toDto(
-            findOffer(id)
+            findOffer(
+                id
+            )
         );
     }
+
 
     // ---------------------------------------------------------
     // Erstellen
@@ -91,18 +108,14 @@ public class OfferServiceImpl
         OfferRequest request
     ) {
 
-        validateRequest(request);
+        validateRequest(
+            request
+        );
 
         String offerNumber =
-            normalizeRequired(
-                request.offerNumber(),
-                "Angebotsnummer"
+            generateOfferNumber(
+                request.offerDate()
             );
-
-        validateOfferNumber(
-            null,
-            offerNumber
-        );
 
         CompanyEntity company =
             findCompany(
@@ -148,7 +161,7 @@ public class OfferServiceImpl
             customer
         );
 
-        replaceItems(
+        addItems(
             offer,
             request.items()
         );
@@ -167,6 +180,7 @@ public class OfferServiceImpl
         );
     }
 
+
     // ---------------------------------------------------------
     // Ändern
     // ---------------------------------------------------------
@@ -177,24 +191,17 @@ public class OfferServiceImpl
         OfferRequest request
     ) {
 
-        validateRequest(request);
+        validateRequest(
+            request
+        );
 
         OfferEntity offer =
-            findOffer(id);
+            findOffer(
+                id
+            );
 
         validateNotArchived(
             offer
-        );
-
-        String offerNumber =
-            normalizeRequired(
-                request.offerNumber(),
-                "Angebotsnummer"
-            );
-
-        validateOfferNumber(
-            id,
-            offerNumber
         );
 
         CompanyEntity company =
@@ -206,10 +213,6 @@ public class OfferServiceImpl
             findCustomer(
                 request.customerId()
             );
-
-        offer.setOfferNumber(
-            offerNumber
-        );
 
         offer.setOfferDate(
             request.offerDate()
@@ -238,7 +241,11 @@ public class OfferServiceImpl
             customer
         );
 
-        replaceItems(
+        clearItemsAndFlush(
+            offer
+        );
+
+        addItems(
             offer,
             request.items()
         );
@@ -247,15 +254,13 @@ public class OfferServiceImpl
             offer
         );
 
-        OfferEntity saved =
-            offerRepository.saveAndFlush(
-                offer
-            );
+        entityManager.flush();
 
         return offerMapper.toDto(
-            saved
+            offer
         );
     }
+
 
     // ---------------------------------------------------------
     // Löschen
@@ -267,7 +272,9 @@ public class OfferServiceImpl
     ) {
 
         OfferEntity offer =
-            findOffer(id);
+            findOffer(
+                id
+            );
 
         validateNotArchived(
             offer
@@ -277,6 +284,105 @@ public class OfferServiceImpl
             offer
         );
     }
+
+
+    // ---------------------------------------------------------
+    // Angebotsnummer
+    // ---------------------------------------------------------
+
+    private synchronized String generateOfferNumber(
+        LocalDate offerDate
+    ) {
+
+        if (offerDate == null) {
+            throw new IllegalArgumentException(
+                "Das Angebotsdatum darf nicht null sein."
+            );
+        }
+
+        String prefix =
+            OFFER_NUMBER_PREFIX
+                + "-"
+                + offerDate.getYear()
+                + "-";
+
+        int lastSequence =
+            offerRepository
+                .findTopByOfferNumberStartingWithOrderByOfferNumberDesc(
+                    prefix
+                )
+                .map(
+                    OfferEntity::getOfferNumber
+                )
+                .map(
+                    offerNumber ->
+                        extractSequenceNumber(
+                            offerNumber,
+                            prefix
+                        )
+                )
+                .orElse(
+                    0
+                );
+
+        int nextSequence =
+            lastSequence + 1;
+
+        String offerNumber =
+            prefix
+                + String.format(
+                "%0"
+                    + OFFER_NUMBER_LENGTH
+                    + "d",
+                nextSequence
+            );
+
+        validateOfferNumber(
+            null,
+            offerNumber
+        );
+
+        return offerNumber;
+    }
+
+
+    private int extractSequenceNumber(
+        String offerNumber,
+        String prefix
+    ) {
+
+        if (
+            offerNumber == null
+                || !offerNumber.startsWith(
+                prefix
+            )
+        ) {
+            throw new IllegalStateException(
+                "Ungültige Angebotsnummer: "
+                    + offerNumber
+            );
+        }
+
+        String sequence =
+            offerNumber.substring(
+                prefix.length()
+            );
+
+        try {
+            return Integer.parseInt(
+                sequence
+            );
+        } catch (
+            NumberFormatException exception
+        ) {
+            throw new IllegalStateException(
+                "Ungültige Angebotsnummer: "
+                    + offerNumber,
+                exception
+            );
+        }
+    }
+
 
     // ---------------------------------------------------------
     // Angebotskopf
@@ -328,6 +434,7 @@ public class OfferServiceImpl
             request.active()
         );
     }
+
 
     // ---------------------------------------------------------
     // Kundensnapshot
@@ -404,11 +511,26 @@ public class OfferServiceImpl
         );
     }
 
+
     // ---------------------------------------------------------
-    // Positionen
+    // Bestehende Positionen entfernen
     // ---------------------------------------------------------
 
-    private void replaceItems(
+    private void clearItemsAndFlush(
+        OfferEntity offer
+    ) {
+
+        offer.clearItems();
+
+        entityManager.flush();
+    }
+
+
+    // ---------------------------------------------------------
+    // Neue Positionen hinzufügen
+    // ---------------------------------------------------------
+
+    private void addItems(
         OfferEntity offer,
         List<OfferItemRequest> requests
     ) {
@@ -417,18 +539,30 @@ public class OfferServiceImpl
             requests
         );
 
-        List<OfferItemEntity> items =
-            requests == null
-                ? List.of()
-                : requests
-                .stream()
-                .map(this::createItem)
-                .toList();
+        if (requests == null) {
+            return;
+        }
 
-        offer.replaceItems(
-            items
-        );
+        for (
+            OfferItemRequest request :
+            requests
+        ) {
+
+            OfferItemEntity item =
+                createItem(
+                    request
+                );
+
+            offer.addItem(
+                item
+            );
+        }
     }
+
+
+    // ---------------------------------------------------------
+    // Position erstellen
+    // ---------------------------------------------------------
 
     private OfferItemEntity createItem(
         OfferItemRequest request
@@ -459,10 +593,6 @@ public class OfferServiceImpl
             request.vatRate()
         );
 
-        /*
-         * Optionale Positionen werden vollständig berechnet,
-         * aber nicht in die Angebotssumme aufgenommen.
-         */
         item.setOptional(
             request.optional()
         );
@@ -473,7 +603,9 @@ public class OfferServiceImpl
             )
         );
 
-        if (request.productId() != null) {
+        if (
+            request.productId() != null
+        ) {
             applyProductSnapshot(
                 item,
                 request
@@ -491,6 +623,7 @@ public class OfferServiceImpl
 
         return item;
     }
+
 
     // ---------------------------------------------------------
     // Produktposition
@@ -552,6 +685,7 @@ public class OfferServiceImpl
         );
     }
 
+
     // ---------------------------------------------------------
     // Freie Position
     // ---------------------------------------------------------
@@ -561,7 +695,9 @@ public class OfferServiceImpl
         OfferItemRequest request
     ) {
 
-        item.setProduct(null);
+        item.setProduct(
+            null
+        );
 
         item.setProductNumber(
             normalizeNullable(
@@ -597,6 +733,7 @@ public class OfferServiceImpl
             request.unitPriceNet()
         );
     }
+
 
     // ---------------------------------------------------------
     // Positionsberechnung
@@ -682,6 +819,7 @@ public class OfferServiceImpl
         );
     }
 
+
     // ---------------------------------------------------------
     // Angebotssummen
     // ---------------------------------------------------------
@@ -690,19 +828,12 @@ public class OfferServiceImpl
         OfferEntity offer
     ) {
 
-        /*
-         * Optionale Positionen werden nicht in die
-         * Angebotssummen eingerechnet.
-         *
-         * Ihre eigenen lineNet-, taxAmount- und
-         * lineGross-Werte bleiben trotzdem gespeichert.
-         */
-
         BigDecimal subtotalNet =
             offer.getItems()
                 .stream()
-                .filter(item ->
-                    !item.isOptional()
+                .filter(
+                    item ->
+                        !item.isOptional()
                 )
                 .map(
                     OfferItemEntity::getLineNet
@@ -722,8 +853,9 @@ public class OfferServiceImpl
         BigDecimal taxAmount =
             offer.getItems()
                 .stream()
-                .filter(item ->
-                    !item.isOptional()
+                .filter(
+                    item ->
+                        !item.isOptional()
                 )
                 .map(
                     OfferItemEntity::getTaxAmount
@@ -763,6 +895,7 @@ public class OfferServiceImpl
         );
     }
 
+
     // ---------------------------------------------------------
     // Entity suchen
     // ---------------------------------------------------------
@@ -777,7 +910,9 @@ public class OfferServiceImpl
         );
 
         return offerRepository
-            .findById(id)
+            .findById(
+                id
+            )
             .orElseThrow(() ->
                 new ResourceNotFoundException(
                     "Angebot mit ID "
@@ -786,6 +921,7 @@ public class OfferServiceImpl
                 )
             );
     }
+
 
     private CompanyEntity findCompany(
         Long id
@@ -797,7 +933,9 @@ public class OfferServiceImpl
         );
 
         return companyRepository
-            .findById(id)
+            .findById(
+                id
+            )
             .orElseThrow(() ->
                 new ResourceNotFoundException(
                     "Firma mit ID "
@@ -806,6 +944,7 @@ public class OfferServiceImpl
                 )
             );
     }
+
 
     private CustomerEntity findCustomer(
         Long id
@@ -817,7 +956,9 @@ public class OfferServiceImpl
         );
 
         return customerRepository
-            .findById(id)
+            .findById(
+                id
+            )
             .orElseThrow(() ->
                 new ResourceNotFoundException(
                     "Kunde mit ID "
@@ -826,6 +967,7 @@ public class OfferServiceImpl
                 )
             );
     }
+
 
     private ProductEntity findProduct(
         Long id
@@ -837,7 +979,9 @@ public class OfferServiceImpl
         );
 
         return productRepository
-            .findById(id)
+            .findById(
+                id
+            )
             .orElseThrow(() ->
                 new ResourceNotFoundException(
                     "Produkt mit ID "
@@ -847,6 +991,7 @@ public class OfferServiceImpl
             );
     }
 
+
     // ---------------------------------------------------------
     // Request validieren
     // ---------------------------------------------------------
@@ -855,30 +1000,33 @@ public class OfferServiceImpl
         OfferRequest request
     ) {
 
-        if (request == null) {
+        if (
+            request == null
+        ) {
             throw new IllegalArgumentException(
                 "OfferRequest darf nicht null sein."
             );
         }
 
-        normalizeRequired(
-            request.offerNumber(),
-            "Angebotsnummer"
-        );
-
-        if (request.offerDate() == null) {
+        if (
+            request.offerDate() == null
+        ) {
             throw new IllegalArgumentException(
                 "Das Angebotsdatum darf nicht null sein."
             );
         }
 
-        if (request.companyId() == null) {
+        if (
+            request.companyId() == null
+        ) {
             throw new IllegalArgumentException(
                 "Die Firmen-ID darf nicht null sein."
             );
         }
 
-        if (request.customerId() == null) {
+        if (
+            request.customerId() == null
+        ) {
             throw new IllegalArgumentException(
                 "Die Kunden-ID darf nicht null sein."
             );
@@ -907,11 +1055,14 @@ public class OfferServiceImpl
         }
     }
 
+
     private void validateItemRequest(
         OfferItemRequest request
     ) {
 
-        if (request == null) {
+        if (
+            request == null
+        ) {
             throw new IllegalArgumentException(
                 "OfferItemRequest darf nicht null sein."
             );
@@ -938,7 +1089,9 @@ public class OfferServiceImpl
             );
         }
 
-        if (request.vatRate() == null) {
+        if (
+            request.vatRate() == null
+        ) {
             throw new IllegalArgumentException(
                 "Der Umsatzsteuersatz darf nicht null sein."
             );
@@ -967,18 +1120,24 @@ public class OfferServiceImpl
         }
     }
 
+
     private void validateUniquePositionNumbers(
         List<OfferItemRequest> requests
     ) {
 
-        if (requests == null) {
+        if (
+            requests == null
+        ) {
             return;
         }
 
         Set<Integer> positionNumbers =
             new HashSet<>();
 
-        for (OfferItemRequest request : requests) {
+        for (
+            OfferItemRequest request :
+            requests
+        ) {
 
             if (
                 request == null
@@ -1001,6 +1160,7 @@ public class OfferServiceImpl
         }
     }
 
+
     private void validateOfferNumber(
         Long currentId,
         String offerNumber
@@ -1014,7 +1174,9 @@ public class OfferServiceImpl
                 currentId == null
                     || !existing
                     .getId()
-                    .equals(currentId)
+                    .equals(
+                        currentId
+                    )
             )
             .ifPresent(existing -> {
                 throw new IllegalArgumentException(
@@ -1025,11 +1187,14 @@ public class OfferServiceImpl
             });
     }
 
+
     private void validateNotArchived(
         OfferEntity offer
     ) {
 
-        if (offer.isArchived()) {
+        if (
+            offer.isArchived()
+        ) {
             throw new IllegalStateException(
                 "Das Angebot "
                     + offer.getOfferNumber()
@@ -1039,11 +1204,14 @@ public class OfferServiceImpl
         }
     }
 
+
     private void validateUnitPrice(
         BigDecimal unitPrice
     ) {
 
-        if (unitPrice == null) {
+        if (
+            unitPrice == null
+        ) {
             throw new IllegalArgumentException(
                 "Der Netto-Einzelpreis darf nicht null sein."
             );
@@ -1060,12 +1228,15 @@ public class OfferServiceImpl
         }
     }
 
+
     private void validatePercentage(
         BigDecimal value,
         String fieldName
     ) {
 
-        if (value == null) {
+        if (
+            value == null
+        ) {
             throw new IllegalArgumentException(
                 fieldName
                     + " darf nicht null sein."
@@ -1087,6 +1258,7 @@ public class OfferServiceImpl
         }
     }
 
+
     private void validateId(
         Long id,
         String fieldName
@@ -1103,6 +1275,7 @@ public class OfferServiceImpl
         }
     }
 
+
     // ---------------------------------------------------------
     // Texte
     // ---------------------------------------------------------
@@ -1117,7 +1290,9 @@ public class OfferServiceImpl
                 value
             );
 
-        if (normalized != null) {
+        if (
+            normalized != null
+        ) {
             return normalized;
         }
 
@@ -1125,6 +1300,7 @@ public class OfferServiceImpl
             fallbackValue
         );
     }
+
 
     private String fallbackRequired(
         String value,
@@ -1138,7 +1314,9 @@ public class OfferServiceImpl
                 fallbackValue
             );
 
-        if (result == null) {
+        if (
+            result == null
+        ) {
             throw new IllegalArgumentException(
                 fieldName
                     + " darf nicht leer sein."
@@ -1147,6 +1325,7 @@ public class OfferServiceImpl
 
         return result;
     }
+
 
     private String defaultValue(
         String value,
@@ -1163,6 +1342,7 @@ public class OfferServiceImpl
             : normalized;
     }
 
+
     private String normalizeRequired(
         String value,
         String fieldName
@@ -1173,7 +1353,9 @@ public class OfferServiceImpl
                 value
             );
 
-        if (normalized == null) {
+        if (
+            normalized == null
+        ) {
             throw new IllegalArgumentException(
                 fieldName
                     + " darf nicht leer sein."
@@ -1183,11 +1365,14 @@ public class OfferServiceImpl
         return normalized;
     }
 
+
     private String normalizeNullable(
         String value
     ) {
 
-        if (value == null) {
+        if (
+            value == null
+        ) {
             return null;
         }
 
@@ -1198,6 +1383,7 @@ public class OfferServiceImpl
             ? null
             : normalized;
     }
+
 
     // ---------------------------------------------------------
     // Zahlen

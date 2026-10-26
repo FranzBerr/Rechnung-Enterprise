@@ -9,9 +9,7 @@ public interface OfferItemRepository
     extends JpaRepository<OfferItemEntity, Long> {
 
     List<OfferItemEntity>
-    findByOfferIdOrderByPositionNumber(
-        Long offerId
-    );
+    findByOfferIdOrderByPositionNumber(Long offerId );
 
     List<OfferItemEntity>
     findByProductId(

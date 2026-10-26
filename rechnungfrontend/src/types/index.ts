@@ -8,4 +8,4 @@ export type * from "./bankAccount";
 
 export type * from "./product";
 
-export type * from "./invoice";
+// export type * from "./invoice";

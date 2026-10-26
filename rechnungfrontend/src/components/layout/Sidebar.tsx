@@ -1,203 +1,265 @@
+import type {
+  ReactNode,
+} from "react";
+
 import {
+  Box,
   Divider,
   Drawer,
   List,
   ListItemButton,
   ListItemIcon,
   ListItemText,
-  Toolbar,
   Typography,
 } from "@mui/material";
 
-import {
-  AccountBalanceOutlined,
-  BusinessOutlined,
-  DashboardOutlined,
-  Inventory2Outlined,
-  PeopleOutlined,
-  ReceiptLongOutlined,
-  WalletOutlined,
-} from "@mui/icons-material";
+import DashboardOutlinedIcon
+  from "@mui/icons-material/DashboardOutlined";
+
+import BusinessOutlinedIcon
+  from "@mui/icons-material/BusinessOutlined";
+
+import PeopleOutlinedIcon
+  from "@mui/icons-material/PeopleOutlined";
+
+import AccountBalanceOutlinedIcon
+  from "@mui/icons-material/AccountBalanceOutlined";
+
+import CreditCardOutlinedIcon
+  from "@mui/icons-material/CreditCardOutlined";
+
+import Inventory2OutlinedIcon
+  from "@mui/icons-material/Inventory2Outlined";
+
+import RequestQuoteOutlinedIcon
+  from "@mui/icons-material/RequestQuoteOutlined";
+
+import LocalShippingOutlinedIcon
+  from "@mui/icons-material/LocalShippingOutlined";
+
+import ReceiptLongOutlinedIcon
+  from "@mui/icons-material/ReceiptLongOutlined";
 
 import {
-  Link,
-  useLocation,
+  NavLink,
 } from "react-router-dom";
 
-import type { ReactNode } from "react";
+interface SidebarProps {
+  width: number;
+  headerHeight: number;
+}
 
-const drawerWidth = 260;
-
-interface MenuItem {
+interface NavigationItem {
   label: string;
   path: string;
   icon: ReactNode;
 }
 
-const masterDataMenuItems: MenuItem[] = [
+const masterDataItems: NavigationItem[] = [
   {
     label: "Firmen",
     path: "/companies",
-    icon: <BusinessOutlined />,
+    icon: <BusinessOutlinedIcon />,
   },
   {
     label: "Kunden",
     path: "/customers",
-    icon: <PeopleOutlined />,
+    icon: <PeopleOutlinedIcon />,
   },
   {
     label: "Banken",
     path: "/banks",
-    icon: <AccountBalanceOutlined />,
+    icon: <AccountBalanceOutlinedIcon />,
   },
   {
     label: "Bankkonten",
     path: "/bank-accounts",
-    icon: <WalletOutlined />,
+    icon: <CreditCardOutlinedIcon />,
   },
   {
     label: "Produkte",
     path: "/products",
-    icon: <Inventory2Outlined />,
+    icon: <Inventory2OutlinedIcon />,
   },
 ];
 
-export default function Sidebar() {
-  const location = useLocation();
+const transactionItems: NavigationItem[] = [
+  {
+    label: "Angebote",
+    path: "/offers",
+    icon: <RequestQuoteOutlinedIcon />,
+  },
+  {
+    label: "Lieferscheine",
+    path: "/delivery-notes",
+    icon: <LocalShippingOutlinedIcon />,
+  },
+  {
+    label: "Rechnungen",
+    path: "/invoices",
+    icon: <ReceiptLongOutlinedIcon />,
+  },
+];
 
-  function isActive(path: string): boolean {
+export default function Sidebar({
+                                  width,
+                                  headerHeight,
+                                }: SidebarProps) {
+
+  const renderItem = (
+    item: NavigationItem,
+  ) => {
+
     return (
-      location.pathname === path ||
-      location.pathname.startsWith(
-        `${path}/`
-      )
+      <ListItemButton
+        key={item.path}
+        component={NavLink}
+        to={item.path}
+        sx={{
+          mx: 1.5,
+          mb: 0.5,
+          px: 2,
+          minHeight: 46,
+          borderRadius: 2,
+
+          color: "text.primary",
+
+          "& .MuiListItemIcon-root": {
+            minWidth: 40,
+            color: "text.secondary",
+          },
+
+          "&.active": {
+            color: "primary.main",
+            bgcolor: "action.selected",
+
+            "& .MuiListItemIcon-root": {
+              color: "primary.main",
+            },
+
+            "& .MuiListItemText-primary": {
+              fontWeight: 600,
+            },
+          },
+
+          "&:hover": {
+            bgcolor: "action.hover",
+          },
+        }}
+      >
+        <ListItemIcon>
+          {item.icon}
+        </ListItemIcon>
+
+        <ListItemText
+          primary={item.label}
+        />
+      </ListItemButton>
     );
-  }
+  };
 
   return (
     <Drawer
       variant="permanent"
       sx={{
-        width: drawerWidth,
+        width,
         flexShrink: 0,
+
         "& .MuiDrawer-paper": {
-          width: drawerWidth,
+          width,
+          top: `${headerHeight}px`,
+
+          height:
+            `calc(100vh - ${headerHeight}px)`,
+
           boxSizing: "border-box",
+
+          borderRight: 1,
+          borderColor: "divider",
+
+          bgcolor: "background.paper",
         },
       }}
     >
-      <Toolbar />
-
-      <List>
-        <ListItemButton
-          component={Link}
-          to="/dashboard"
-          selected={isActive("/dashboard")}
-          sx={menuItemStyle}
-        >
-          <ListItemIcon>
-            <DashboardOutlined />
-          </ListItemIcon>
-
-          <ListItemText
-            primary="Dashboard"
-          />
-        </ListItemButton>
-      </List>
-
-      <Divider />
-
-      <Typography
-        variant="overline"
-        color="text.secondary"
+      <Box
         sx={{
-          display: "block",
-          px: 2,
-          pt: 2,
-          pb: 1,
+          py: 2,
+          height: "100%",
+          overflowY: "auto",
         }}
       >
-        Stammdaten
-      </Typography>
+        {/* Dashboard */}
 
-      <List>
-        {masterDataMenuItems.map(
-          (item) => (
-            <ListItemButton
-              key={item.path}
-              component={Link}
-              to={item.path}
-              selected={isActive(
-                item.path
-              )}
-              sx={menuItemStyle}
-            >
-              <ListItemIcon>
-                {item.icon}
-              </ListItemIcon>
-
-              <ListItemText
-                primary={item.label}
-              />
-            </ListItemButton>
-          )
-        )}
-      </List>
-
-      <Divider />
-
-      <Typography
-        variant="overline"
-        color="text.secondary"
-        sx={{
-          display: "block",
-          px: 2,
-          pt: 2,
-          pb: 1,
-        }}
-      >
-        Rechnungen
-      </Typography>
-
-      <List>
-        <ListItemButton
-          component={Link}
-          to="/invoices"
-          selected={isActive("/invoices")}
-          sx={menuItemStyle}
+        <List
+          disablePadding
         >
-          <ListItemIcon>
-            <ReceiptLongOutlined />
-          </ListItemIcon>
+          {renderItem({
+            label: "Dashboard",
+            path: "/dashboard",
+            icon: (
+              <DashboardOutlinedIcon />
+            ),
+          })}
+        </List>
 
-          <ListItemText
-            primary="Rechnungen"
-          />
-        </ListItemButton>
-      </List>
+        <Divider
+          sx={{
+            my: 2,
+          }}
+        />
+
+        {/* Stammdaten */}
+
+        <Typography
+          variant="overline"
+          sx={{
+            display: "block",
+            px: 3,
+            mb: 1,
+            color: "text.secondary",
+            fontWeight: 700,
+          }}
+        >
+          Stammdaten
+        </Typography>
+
+        <List
+          disablePadding
+        >
+          {masterDataItems.map(
+            renderItem,
+          )}
+        </List>
+
+        <Divider
+          sx={{
+            my: 2,
+          }}
+        />
+
+        {/* Vorgänge */}
+
+        <Typography
+          variant="overline"
+          sx={{
+            display: "block",
+            px: 3,
+            mb: 1,
+            color: "text.secondary",
+            fontWeight: 700,
+          }}
+        >
+          Vorgänge
+        </Typography>
+
+        <List
+          disablePadding
+        >
+          {transactionItems.map(
+            renderItem,
+          )}
+        </List>
+      </Box>
     </Drawer>
   );
 }
-
-const menuItemStyle = {
-  mx: 1,
-  my: 0.25,
-  borderRadius: 1,
-
-  "&.Mui-selected": {
-    bgcolor: "primary.main",
-    color: "primary.contrastText",
-
-    "& .MuiListItemIcon-root": {
-      color: "primary.contrastText",
-    },
-
-    "&:hover": {
-      bgcolor: "primary.dark",
-    },
-  },
-
-  "&:hover": {
-    bgcolor: "action.hover",
-  },
-};

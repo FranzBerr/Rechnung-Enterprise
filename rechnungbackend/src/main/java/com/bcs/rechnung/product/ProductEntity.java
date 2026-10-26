@@ -61,6 +61,13 @@ public class ProductEntity {
     )
     private BigDecimal netPrice;
 
+    @Column(
+        name = "vat_rate",
+        nullable = false,
+        precision = 5, scale = 2
+    )
+    private BigDecimal vatRate;
+
     @Column(name = "active", nullable = false)
     private boolean active = true;
 }

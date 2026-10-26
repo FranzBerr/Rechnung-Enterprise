@@ -1,73 +1,175 @@
 import axiosInstance from "./axiosInstance";
 
 import type {
-  Company,
+  CompanyDto,
+} from "../features/company/dto/CompanyDto";
+
+import type {
   CompanyRequest,
-} from "../types/company";
+} from "../features/company/dto/CompanyRequest";
 
-class CompanyApi {
 
-  private readonly baseUrl =
-    "/companies";
+// =========================================================
+// Basis-URL
+// =========================================================
 
-  async findAll(): Promise<Company[]> {
+// axiosInstance enthält bereits:
+//
+// http://localhost:8080/api
+//
+// Daraus wird:
+//
+// http://localhost:8080/api/companies
 
-    const response =
-      await axiosInstance.get<Company[]>(
-        this.baseUrl
-      );
+const BASE_URL = "/companies";
 
-    return response.data;
-  }
 
-  async findById(
-    id: number
-  ): Promise<Company> {
+// =========================================================
+// Alle Firmen laden
+// =========================================================
 
-    const response =
-      await axiosInstance.get<Company>(
-        `${this.baseUrl}/${id}`
-      );
+// Backend:
+// GET /api/companies
 
-    return response.data;
-  }
-
-  async create(
-    request: CompanyRequest
-  ): Promise<Company> {
-
-    const response =
-      await axiosInstance.post<Company>(
-        this.baseUrl,
-        request
-      );
-
-    return response.data;
-  }
-
-  async update(
-    id: number,
-    request: CompanyRequest
-  ): Promise<Company> {
-
-    const response =
-      await axiosInstance.put<Company>(
-        `${this.baseUrl}/${id}`,
-        request
-      );
-
-    return response.data;
-  }
-
-  async delete(
-    id: number
-  ): Promise<void> {
-
-    await axiosInstance.delete(
-      `${this.baseUrl}/${id}`
+export async function getCompanies(): Promise<CompanyDto[]> {
+  const response =
+    await axiosInstance.get<CompanyDto[]>(
+      BASE_URL,
     );
-  }
+
+  return response.data;
 }
 
-export const companyApi =
-  new CompanyApi();
+
+// =========================================================
+// Aktive Firmen laden
+// =========================================================
+
+// Backend:
+// GET /api/companies/active
+
+export async function getActiveCompanies(): Promise<CompanyDto[]> {
+  const response =
+    await axiosInstance.get<CompanyDto[]>(
+      `${BASE_URL}/active`,
+    );
+
+  return response.data;
+}
+
+
+// =========================================================
+// Firma anhand der ID laden
+// =========================================================
+
+// Backend:
+// GET /api/companies/{id}
+
+export async function getCompanyById(
+  id: number,
+): Promise<CompanyDto> {
+  const response =
+    await axiosInstance.get<CompanyDto>(
+      `${BASE_URL}/${id}`,
+    );
+
+  return response.data;
+}
+
+
+// =========================================================
+// Firma erstellen
+// =========================================================
+
+// Backend:
+// POST /api/companies
+
+export async function createCompany(
+  request: CompanyRequest,
+): Promise<CompanyDto> {
+  const response =
+    await axiosInstance.post<CompanyDto>(
+      BASE_URL,
+      request,
+    );
+
+  return response.data;
+}
+
+
+// =========================================================
+// Firma aktualisieren
+// =========================================================
+
+// Backend:
+// PUT /api/companies/{id}
+
+export async function updateCompany(
+  id: number,
+  request: CompanyRequest,
+): Promise<CompanyDto> {
+  const response =
+    await axiosInstance.put<CompanyDto>(
+      `${BASE_URL}/${id}`,
+      request,
+    );
+
+  return response.data;
+}
+
+
+// =========================================================
+// Firma aktivieren
+// =========================================================
+
+// Backend:
+// PUT /api/companies/{id}/activate
+
+export async function activateCompany(
+  id: number,
+): Promise<CompanyDto> {
+  const response =
+    await axiosInstance.put<CompanyDto>(
+      `${BASE_URL}/${id}/activate`,
+    );
+
+  return response.data;
+}
+
+
+// =========================================================
+// Firma deaktivieren
+// =========================================================
+
+// Backend:
+// PUT /api/companies/{id}/deactivate
+
+export async function deactivateCompany(
+  id: number,
+): Promise<CompanyDto> {
+  const response =
+    await axiosInstance.put<CompanyDto>(
+      `${BASE_URL}/${id}/deactivate`,
+    );
+
+  return response.data;
+}
+
+
+// =========================================================
+// Firma löschen
+// =========================================================
+
+// Backend:
+// DELETE /api/companies/{id}
+//
+// Erfolgreiche Antwort:
+// HTTP 204 NO CONTENT
+
+export async function deleteCompany(
+  id: number,
+): Promise<void> {
+  await axiosInstance.delete(
+    `${BASE_URL}/${id}`,
+  );
+}

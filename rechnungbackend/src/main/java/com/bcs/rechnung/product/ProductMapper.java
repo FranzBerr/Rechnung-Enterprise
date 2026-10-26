@@ -20,6 +20,7 @@ public class ProductMapper {
             entity.getDescription(),
             entity.getUnit(),
             entity.getNetPrice(),
+            entity.getVatRate(),
             entity.isActive()
         );
     }
@@ -38,6 +39,7 @@ public class ProductMapper {
         entity.setDescription(request.description());
         entity.setUnit(request.unit());
         entity.setNetPrice(request.netPrice());
+        entity.setVatRate(request.vatRate());
         entity.setActive(request.active());
 
         return entity;
@@ -55,6 +57,7 @@ public class ProductMapper {
         entity.setDescription(request.description());
         entity.setUnit(request.unit());
         entity.setNetPrice(request.netPrice());
+        entity.setVatRate(request.vatRate());
         entity.setActive(request.active());
     }
 }

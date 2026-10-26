@@ -97,6 +97,55 @@ public record CustomerRequest(
         description = "Aktiv",
         example = "true"
     )
-    boolean active
+    boolean active,
+
+    /*
+     * ---------------------------------------------------------
+     * XRechnung / elektronische Rechnungsstellung
+     * ---------------------------------------------------------
+     */
+
+    @Size(max = 100)
+    @Schema(
+        description = "Leitweg-ID des Rechnungsempfängers",
+        example = "09184-12345-67"
+    )
+    String leitwegId,
+
+    @Size(max = 200)
+    @Schema(
+        description = "Elektronische Adresse des Rechnungsempfängers",
+        example = "09184-12345-67"
+    )
+    String electronicAddress,
+
+    @Size(max = 20)
+    @Schema(
+        description = "Schema der elektronischen Adresse",
+        example = "0204"
+    )
+    String electronicAddressScheme,
+
+    @Size(max = 250)
+    @Schema(
+        description = "Geschäftsprozess-ID für die elektronische Rechnung",
+        example = "urn:fdc:peppol.eu:2017:poacc:billing:01:1.0"
+    )
+    String businessProcessId,
+
+    @Size(max = 200)
+    @Schema(
+        description = "Käuferreferenz für die elektronische Rechnung",
+        example = "09184-12345-67"
+    )
+    String buyerReference,
+
+    @Size(max = 200)
+    @Schema(
+        description = "Abteilung beziehungsweise Organisationseinheit des Kunden",
+        example = "Zentrale Rechnungsstelle"
+    )
+    String department
+
 ) {
 }

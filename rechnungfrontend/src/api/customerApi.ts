@@ -1,132 +1,194 @@
 import axiosInstance from "./axiosInstance";
+
 import type {
-  Customer,
+  CustomerDto,
+} from "../features/customer/dto/CustomerDto";
+
+import type {
   CustomerRequest,
-} from "../types/customer";
+} from "../features/customer/dto/CustomerRequest";
 
-import type {
-  PageResponse,
-} from "../types/common";
 
-export interface CustomerSearchRequest {
+// =========================================================
+// Basis-URL
+// =========================================================
 
-  customerNumber?: string;
+// axiosInstance enthält bereits:
+//
+// http://localhost:8080/api
+//
+// Daraus wird:
+//
+// http://localhost:8080/api/customers
 
-  companyName?: string;
+const BASE_URL = "/customers";
 
-  city?: string;
 
-  active?: boolean;
+// =========================================================
+// Alle Kunden laden
+// =========================================================
 
-  page?: number;
+// Backend:
+// GET /api/customers
 
-  size?: number;
-
-  sort?: string;
-}
-
-class CustomerApi {
-
-  private readonly baseUrl =
-    "/customers";
-
-  async findAll(): Promise<Customer[]> {
-
-    const response =
-      await axiosInstance.get<Customer[]>(
-        this.baseUrl
-      );
-
-    return response.data;
-  }
-
-  async findById(
-    id: number
-  ): Promise<Customer> {
-
-    const response =
-      await axiosInstance.get<Customer>(
-        `${this.baseUrl}/${id}`
-      );
-
-    return response.data;
-  }
-
-  async create(
-    request: CustomerRequest
-  ): Promise<Customer> {
-
-    const response =
-      await axiosInstance.post<Customer>(
-        this.baseUrl,
-        request
-      );
-
-    return response.data;
-  }
-
-  async update(
-    id: number,
-    request: CustomerRequest
-  ): Promise<Customer> {
-
-    const response =
-      await axiosInstance.put<Customer>(
-        `${this.baseUrl}/${id}`,
-        request
-      );
-
-    return response.data;
-  }
-
-  async delete(
-    id: number
-  ): Promise<void> {
-
-    await axiosInstance.delete(
-      `${this.baseUrl}/${id}`
+export async function getCustomers(): Promise<CustomerDto[]> {
+  const response =
+    await axiosInstance.get<CustomerDto[]>(
+      BASE_URL,
     );
-  }
 
-  async search(
-    request: CustomerSearchRequest
-  ): Promise<PageResponse<Customer>> {
-
-    const response =
-      await axiosInstance.post<
-        PageResponse<Customer>
-      >(
-        `${this.baseUrl}/search`,
-        request
-      );
-
-    return response.data;
-  }
-
-  async activate(
-    id: number
-  ): Promise<Customer> {
-
-    const response =
-      await axiosInstance.put<Customer>(
-        `${this.baseUrl}/${id}/activate`
-      );
-
-    return response.data;
-  }
-
-  async deactivate(
-    id: number
-  ): Promise<Customer> {
-
-    const response =
-      await axiosInstance.put<Customer>(
-        `${this.baseUrl}/${id}/deactivate`
-      );
-
-    return response.data;
-  }
+  return response.data;
 }
 
-export const customerApi =
-  new CustomerApi();
+
+// =========================================================
+// Aktive Kunden laden
+// =========================================================
+
+// Backend:
+// GET /api/customers/active
+
+export async function getActiveCustomers(): Promise<CustomerDto[]> {
+  const response =
+    await axiosInstance.get<CustomerDto[]>(
+      `${BASE_URL}/active`,
+    );
+
+  return response.data;
+}
+
+
+// =========================================================
+// Kunde anhand der ID laden
+// =========================================================
+
+// Backend:
+// GET /api/customers/{id}
+
+export async function getCustomerById(
+  id: number,
+): Promise<CustomerDto> {
+  const response =
+    await axiosInstance.get<CustomerDto>(
+      `${BASE_URL}/${id}`,
+    );
+
+  return response.data;
+}
+
+
+// =========================================================
+// Kunden einer Firma laden
+// =========================================================
+
+// Backend:
+// GET /api/customers/company/{companyId}
+
+export async function getCustomersByCompanyId(
+  companyId: number,
+): Promise<CustomerDto[]> {
+  const response =
+    await axiosInstance.get<CustomerDto[]>(
+      `${BASE_URL}/company/${companyId}`,
+    );
+
+  return response.data;
+}
+
+
+// =========================================================
+// Kunde erstellen
+// =========================================================
+
+// Backend:
+// POST /api/customers
+
+export async function createCustomer(
+  request: CustomerRequest,
+): Promise<CustomerDto> {
+  const response =
+    await axiosInstance.post<CustomerDto>(
+      BASE_URL,
+      request,
+    );
+
+  return response.data;
+}
+
+
+// =========================================================
+// Kunde aktualisieren
+// =========================================================
+
+// Backend:
+// PUT /api/customers/{id}
+
+export async function updateCustomer(
+  id: number,
+  request: CustomerRequest,
+): Promise<CustomerDto> {
+  const response =
+    await axiosInstance.put<CustomerDto>(
+      `${BASE_URL}/${id}`,
+      request,
+    );
+
+  return response.data;
+}
+
+
+// =========================================================
+// Kunde aktivieren
+// =========================================================
+
+// Backend:
+// PUT /api/customers/{id}/activate
+
+export async function activateCustomer(
+  id: number,
+): Promise<CustomerDto> {
+  const response =
+    await axiosInstance.put<CustomerDto>(
+      `${BASE_URL}/${id}/activate`,
+    );
+
+  return response.data;
+}
+
+
+// =========================================================
+// Kunde deaktivieren
+// =========================================================
+
+// Backend:
+// PUT /api/customers/{id}/deactivate
+
+export async function deactivateCustomer(
+  id: number,
+): Promise<CustomerDto> {
+  const response =
+    await axiosInstance.put<CustomerDto>(
+      `${BASE_URL}/${id}/deactivate`,
+    );
+
+  return response.data;
+}
+
+
+// =========================================================
+// Kunde löschen
+// =========================================================
+
+// Backend:
+// DELETE /api/customers/{id}
+//
+// Erfolgreich:
+// HTTP 204 NO CONTENT
+
+export async function deleteCustomer(
+  id: number,
+): Promise<void> {
+  await axiosInstance.delete(
+    `${BASE_URL}/${id}`,
+  );
+}
