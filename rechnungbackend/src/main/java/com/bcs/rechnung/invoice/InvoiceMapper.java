@@ -4,70 +4,141 @@ import com.bcs.rechnung.invoice.dto.InvoiceDto;
 import com.bcs.rechnung.invoice.dto.InvoiceItemDto;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Component
 public class InvoiceMapper {
 
     public InvoiceDto toDto(
-        InvoiceEntity entity
+        InvoiceEntity invoice
     ) {
-        List<InvoiceItemDto> items =
-            entity.getItems()
-                .stream()
-                .map(this::toItemDto)
-                .toList();
+        if (invoice == null) {
+            return null;
+        }
+
+        Long companyId =
+            invoice.getCompany() != null
+                ? invoice.getCompany().getId()
+                : null;
+
+        Long customerId =
+            invoice.getCustomer() != null
+                ? invoice.getCustomer().getId()
+                : null;
+
+        Long bankAccountId =
+            invoice.getBankAccount() != null
+                ? invoice.getBankAccount().getId()
+                : null;
 
         return new InvoiceDto(
-            entity.getId(),
-            entity.getInvoiceNumber(),
-            entity.getInvoiceDate(),
-            entity.getServiceDate(),
-            entity.getDueDate(),
-            entity.getStatus(),
-            entity.getCompany().getId(),
-            entity.getCustomer().getId(),
-            entity.getBankAccount().getId(),
-            entity.getCustomerNumber(),
-            entity.getCustomerName(),
-            entity.getCustomerStreet(),
-            entity.getCustomerZipCode(),
-            entity.getCustomerCity(),
-            entity.getCustomerCountry(),
-            entity.getCustomerVatId(),
-            entity.getBankName(),
-            entity.getIban(),
-            entity.getBic(),
-            entity.getPaymentTermDays(),
-            entity.getDiscountPercent(),
-            entity.getDiscountDays(),
-            entity.getSubtotalNet(),
-            entity.getTaxAmount(),
-            entity.getTotalGross(),
-            entity.getNotes(),
-            entity.getArchived(),
-            entity.getArchivedAt(),
-            items
+            invoice.getId(),
+            invoice.getInvoiceNumber(),
+            invoice.getInvoiceDate(),
+            invoice.getServiceDate(),
+            invoice.getDueDate(),
+            invoice.getStatus(),
+
+            companyId,
+            customerId,
+            bankAccountId,
+
+            invoice.getCustomerNumber(),
+            invoice.getCustomerName(),
+            invoice.getCustomerStreet(),
+            invoice.getCustomerZipCode(),
+            invoice.getCustomerCity(),
+            invoice.getCustomerCountry(),
+            invoice.getCustomerVatId(),
+
+            invoice.getBankName(),
+            invoice.getIban(),
+            invoice.getBic(),
+
+            invoice.getPaymentTermDays(),
+            invoice.getDiscountPercent(),
+            invoice.getDiscountDays(),
+
+            invoice.getSubtotalNet(),
+            invoice.getTaxAmount(),
+            invoice.getTotalGross(),
+
+            invoice.getNotes(),
+
+            invoice.getArchived(),
+            invoice.getArchivedAt(),
+
+            toItemDtos(
+                invoice.getItems()
+            )
         );
     }
 
-    private InvoiceItemDto toItemDto(
-        InvoiceItemEntity entity
+    public List<InvoiceDto> toDtos(
+        List<InvoiceEntity> invoices
     ) {
+        if (invoices == null
+            || invoices.isEmpty()) {
+
+            return new ArrayList<>();
+        }
+
+        return invoices.stream()
+            .map(
+                this::toDto
+            )
+            .toList();
+    }
+
+    public InvoiceItemDto toItemDto(
+        InvoiceItemEntity item
+    ) {
+        if (item == null) {
+            return null;
+        }
+
+        Long productId =
+            item.getProduct() != null
+                ? item.getProduct().getId()
+                : null;
+
         return new InvoiceItemDto(
-            entity.getId(),
-            entity.getPositionNumber(),
-            entity.getProductId(),
-            entity.getProductNumber(),
-            entity.getDescription(),
-            entity.getQuantity(),
-            entity.getUnit(),
-            entity.getUnitPriceNet(),
-            entity.getDiscountPercent(),
-            entity.getVatRate(),
-            entity.getLineNet(),
-            entity.getTaxAmount(),
-            entity.getLineGross()
+            item.getId(),
+            item.getPositionNumber(),
+
+            productId,
+
+            item.getProductNumber(),
+            item.getDescription(),
+
+            item.getQuantity(),
+            item.getUnit(),
+            item.getUnitPriceNet(),
+
+            item.getDiscountPercent(),
+
+            item.getVatRate(),
+
+            item.getLineNet(),
+            item.getTaxAmount(),
+            item.getLineGross()
         );
+    }
+
+    public List<InvoiceItemDto> toItemDtos(
+        List<InvoiceItemEntity> items
+    ) {
+        if (items == null
+            || items.isEmpty()) {
+
+            return new ArrayList<>();
+        }
+
+        return items.stream()
+            .map(
+                this::toItemDto
+            )
+            .toList();
     }
 }

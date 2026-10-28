@@ -56,8 +56,7 @@ public class InvoiceXmlServiceImpl implements InvoiceXmlService {
             );
         }
 
-        XRechnungDto xRechnung =
-            mapInvoice(invoice);
+        XRechnungDto xRechnung = mapInvoice(invoice);
 
         byte[] xml =
             invoiceXmlGenerator.generate(xRechnung);
@@ -96,35 +95,173 @@ public class InvoiceXmlServiceImpl implements InvoiceXmlService {
 //
 //        return invoiceNumber;
 //    }
-    private XRechnungDto mapInvoice(InvoiceEntity invoice) {
-        XRechnungDto dto = new XRechnungDto();
+private XRechnungDto mapInvoice(
+    InvoiceEntity invoice
+) {
 
-        dto.setInvoiceNumber(normalize(invoice.getInvoiceNumber()));
-        dto.setInvoiceDate(invoice.getInvoiceDate());
-        dto.setServiceDate(invoice.getServiceDate());
-        dto.setDueDate(invoice.getDueDate());
-        dto.setBuyerReference(normalize(invoice.getBuyerReference()));
-        dto.setOrderReference(normalize(invoice.getOrderReference()));
-        dto.setInvoiceTypeCode(defaultValue(invoice.getInvoiceTypeCode(), "380"));
-        dto.setPaymentMeansCode(defaultValue(invoice.getPaymentMeansCode(), "58"));
-        dto.setCurrencyCode(defaultValue(invoice.getCurrencyCode(), "EUR"));
-        dto.setPaymentReference(defaultValue(
+    XRechnungDto dto =
+        new XRechnungDto();
+
+    dto.setInvoiceNumber(
+        normalize(
+            invoice.getInvoiceNumber()
+        )
+    );
+
+    dto.setInvoiceDate(
+        invoice.getInvoiceDate()
+    );
+
+    dto.setServiceDate(
+        invoice.getServiceDate()
+    );
+
+    dto.setDueDate(
+        invoice.getDueDate()
+    );
+
+    dto.setTaxPointDate(
+        invoice.getTaxPointDate()
+    );
+
+    dto.setBuyerReference(
+        normalize(
+            invoice.getBuyerReference()
+        )
+    );
+
+    dto.setOrderReference(
+        normalize(
+            invoice.getOrderReference()
+        )
+    );
+
+    dto.setContractReference(
+        normalize(
+            invoice.getContractReference()
+        )
+    );
+
+    dto.setProjectReference(
+        normalize(
+            invoice.getProjectReference()
+        )
+    );
+
+    dto.setDeliveryNoteReference(
+        normalize(
+            invoice.getDeliveryNoteReference()
+        )
+    );
+
+    dto.setInvoiceTypeCode(
+        defaultValue(
+            invoice.getInvoiceTypeCode(),
+            "380"
+        )
+    );
+
+    dto.setPaymentMeansCode(
+        defaultValue(
+            invoice.getPaymentMeansCode(),
+            "58"
+        )
+    );
+
+    dto.setCurrencyCode(
+        defaultValue(
+            invoice.getCurrencyCode(),
+            "EUR"
+        )
+    );
+
+    dto.setPaymentReference(
+        defaultValue(
             invoice.getPaymentReference(),
             invoice.getInvoiceNumber()
-        ));
+        )
+    );
 
-        dto.setBankName(invoice.getBankName());
-        dto.setIban(invoice.getIban());
-        dto.setBic(invoice.getBic());
-        dto.setAccountHolder(invoice.getCompany().getName());
+    dto.setBusinessProcessId(
+        defaultValue(
+            invoice.getBusinessProcessId(),
+            "urn:fdc:peppol.eu:2017:poacc:billing:01:1.0"
+        )
+    );
 
-        dto.setSeller(mapSeller(invoice));
-        dto.setBuyer(mapBuyer(invoice));
-        dto.setTotals(mapTotals(invoice));
-        dto.setItems(mapItems(invoice));
+    dto.setSpecificationIdentifier(
+        defaultValue(
+            invoice.getSpecificationIdentifier(),
+            "urn:cen.eu:en16931:2017#compliant#"
+                + "urn:xeinkauf.de:kosit:xrechnung_3.0"
+        )
+    );
 
-        return dto;
+    dto.setNotes(
+        normalizeMultilineText(
+            invoice.getNotes()
+        )
+    );
+
+    dto.setBankName(
+        normalize(
+            invoice.getBankName()
+        )
+    );
+
+    dto.setIban(
+        normalize(
+            invoice.getIban()
+        )
+    );
+
+    dto.setBic(
+        normalize(
+            invoice.getBic()
+        )
+    );
+
+    CompanyEntity company =
+        invoice.getCompany();
+
+    if (company == null) {
+        throw new IllegalStateException(
+            "Die Firmendaten fehlen für die XRechnung."
+        );
     }
+
+    dto.setAccountHolder(
+        normalize(
+            company.getName()
+        )
+    );
+
+    dto.setSeller(
+        mapSeller(
+            invoice
+        )
+    );
+
+    dto.setBuyer(
+        mapBuyer(
+            invoice
+        )
+    );
+
+    dto.setTotals(
+        mapTotals(
+            invoice
+        )
+    );
+
+    dto.setItems(
+        mapItems(
+            invoice
+        )
+    );
+
+    return dto;
+}
 
     private XRechnungSellerDto mapSeller(InvoiceEntity invoice) {
         CompanyEntity company = invoice.getCompany();
@@ -222,28 +359,50 @@ public class InvoiceXmlServiceImpl implements InvoiceXmlService {
         XRechnungItemDto dto =
             new XRechnungItemDto();
 
+        /*
+         * Positionsnummer
+         */
         dto.setPositionNumber(
             item.getPositionNumber()
         );
 
+        /*
+         * Artikel-/Produktnummer
+         */
         dto.setProductNumber(
-            normalize(item.getProductNumber())
+            normalize(
+                item.getProductNumber()
+            )
         );
 
-        dto.setName(
-            normalize(item.getProductName())
+        /*
+         * Produktbezeichnung
+         */
+        dto.setProductName(
+            normalize(
+                item.getProductName()
+            )
         );
 
+        /*
+         * Mehrzeilige Beschreibung erhalten.
+         */
         dto.setDescription(
             normalizeMultilineText(
                 item.getDescription()
             )
         );
 
+        /*
+         * Menge
+         */
         dto.setQuantity(
             item.getQuantity()
         );
 
+        /*
+         * Einheit, z. B. HUR oder C62.
+         */
         dto.setUnit(
             defaultValue(
                 item.getUnit(),
@@ -251,14 +410,44 @@ public class InvoiceXmlServiceImpl implements InvoiceXmlService {
             )
         );
 
+        /*
+         * Netto-Einzelpreis vor Positionsrabatt.
+         */
         dto.setUnitPriceNet(
-            zeroIfNull(item.getUnitPriceNet())
+            zeroIfNull(
+                item.getUnitPriceNet()
+            )
         );
 
+        /*
+         * Positionsrabatt.
+         *
+         * Beispiel:
+         * 10.0000 = 10 %
+         */
+        dto.setDiscountPercent(
+            zeroIfNull(
+                item.getDiscountPercent()
+            )
+        );
+
+        /*
+         * Umsatzsteuersatz.
+         *
+         * Wichtig:
+         * Dieser Wert muss pro Position erhalten bleiben,
+         * damit der XML-Generator später beispielsweise
+         * S / 7 % und S / 19 % getrennt gruppieren kann.
+         */
         dto.setVatRate(
-            zeroIfNull(item.getVatRate())
+            zeroIfNull(
+                item.getVatRate()
+            )
         );
 
+        /*
+         * Steuerkategorie.
+         */
         dto.setTaxCategoryCode(
             defaultValue(
                 item.getTaxCategoryCode(),
@@ -266,20 +455,36 @@ public class InvoiceXmlServiceImpl implements InvoiceXmlService {
             )
         );
 
+        /*
+         * Positionsnettobetrag nach Rabatt.
+         */
         dto.setLineNet(
-            zeroIfNull(item.getLineNet())
+            zeroIfNull(
+                item.getLineNet()
+            )
         );
 
+        /*
+         * Steuerbetrag der Position.
+         */
         dto.setTaxAmount(
-            zeroIfNull(item.getTaxAmount())
+            zeroIfNull(
+                item.getTaxAmount()
+            )
         );
 
+        /*
+         * Positionsbruttobetrag.
+         */
         dto.setLineGross(
-            zeroIfNull(item.getLineGross())
+            zeroIfNull(
+                item.getLineGross()
+            )
         );
 
         return dto;
     }
+
     private String normalizeMultilineText(
         String value
     ) {

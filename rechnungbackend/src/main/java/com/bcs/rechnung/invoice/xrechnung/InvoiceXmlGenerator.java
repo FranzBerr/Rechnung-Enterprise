@@ -6,51 +6,46 @@ import com.bcs.rechnung.invoice.xrechnung.dto.XRechnungItemDto;
 import com.bcs.rechnung.invoice.xrechnung.dto.XRechnungSellerDto;
 import com.bcs.rechnung.invoice.xrechnung.dto.XRechnungTotalsDto;
 import org.springframework.stereotype.Component;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
 
 import javax.xml.XMLConstants;
-import javax.xml.stream.XMLOutputFactory;
-import javax.xml.stream.XMLStreamException;
-import javax.xml.stream.XMLStreamWriter;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.transform.OutputKeys;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
-import javax.xml.transform.stream.StreamSource;
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
 
 @Component
 public class InvoiceXmlGenerator {
 
-    private static final String RSM =
-        "urn:un:unece:uncefact:data:standard:"
-            + "CrossIndustryInvoice:100";
+    private static final String UBL_INVOICE_NAMESPACE =
+        "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2";
 
-    private static final String RAM =
-        "urn:un:unece:uncefact:data:standard:"
-            + "ReusableAggregateBusinessInformationEntity:100";
+    private static final String CAC_NAMESPACE =
+        "urn:oasis:names:specification:ubl:schema:xsd:"
+            + "CommonAggregateComponents-2";
 
-    private static final String UDT =
-        "urn:un:unece:uncefact:data:standard:"
-            + "UnqualifiedDataType:100";
+    private static final String CBC_NAMESPACE =
+        "urn:oasis:names:specification:ubl:schema:xsd:"
+            + "CommonBasicComponents-2";
 
-    private static final String QDT =
-        "urn:un:unece:uncefact:data:standard:"
-            + "QualifiedDataType:100";
-
-    private static final String XRECHNUNG_GUIDELINE_ID =
-        "urn:cen.eu:en16931:2017#compliant#"
-            + "urn:xeinkauf.de:kosit:xrechnung_3.0";
-
-    private static final String DEFAULT_BUSINESS_PROCESS_ID =
-        "urn:fdc:peppol.eu:2017:poacc:billing:01:1.0";
+    private static final String DEFAULT_CURRENCY =
+        "EUR";
 
     private static final String DEFAULT_INVOICE_TYPE_CODE =
         "380";
@@ -58,1037 +53,2106 @@ public class InvoiceXmlGenerator {
     private static final String DEFAULT_PAYMENT_MEANS_CODE =
         "58";
 
-    private static final String DEFAULT_CURRENCY_CODE =
-        "EUR";
-
-    private static final String DEFAULT_TAX_CATEGORY_CODE =
+    private static final String DEFAULT_TAX_CATEGORY =
         "S";
 
-    private static final DateTimeFormatter DATE_FORMAT =
-        DateTimeFormatter.ofPattern(
-            "yyyyMMdd"
-        );
+    private static final String DEFAULT_UNIT_CODE =
+        "C62";
+
+    private static final String DEFAULT_ELECTRONIC_ADDRESS_SCHEME =
+        "EM";
+
+    private static final String DEFAULT_SPECIFICATION_IDENTIFIER =
+        "urn:cen.eu:en16931:2017#compliant#"
+            + "urn:xeinkauf.de:kosit:xrechnung_3.0";
+
+    private static final String DEFAULT_BUSINESS_PROCESS_ID =
+        "urn:fdc:peppol.eu:2017:poacc:billing:01:1.0";
+
+    private static final int MONEY_SCALE =
+        2;
+
+    private static final int QUANTITY_SCALE =
+        4;
+
+    private static final int PRICE_SCALE =
+        4;
+
+    private static final int RATE_SCALE =
+        2;
+
+    private static final RoundingMode MONEY_ROUNDING =
+        RoundingMode.HALF_UP;
 
     public byte[] generate(
         XRechnungDto invoice
     ) {
-        validate(
+        validateInvoice(
             invoice
         );
 
-        try (
-            ByteArrayOutputStream output =
-                new ByteArrayOutputStream()
-        ) {
-            XMLOutputFactory factory =
-                XMLOutputFactory.newFactory();
+        try {
+            DocumentBuilderFactory factory =
+                createDocumentBuilderFactory();
 
-            XMLStreamWriter writer =
-                factory.createXMLStreamWriter(
-                    output,
-                    StandardCharsets.UTF_8.name()
+            DocumentBuilder documentBuilder =
+                factory.newDocumentBuilder();
+
+            Document document =
+                documentBuilder.newDocument();
+
+            Element root =
+                document.createElementNS(
+                    UBL_INVOICE_NAMESPACE,
+                    "Invoice"
                 );
 
-            writeDocument(
-                writer,
+            root.setAttributeNS(
+                XMLConstants.XMLNS_ATTRIBUTE_NS_URI,
+                "xmlns:cac",
+                CAC_NAMESPACE
+            );
+
+            root.setAttributeNS(
+                XMLConstants.XMLNS_ATTRIBUTE_NS_URI,
+                "xmlns:cbc",
+                CBC_NAMESPACE
+            );
+
+            document.appendChild(
+                root
+            );
+
+            appendHeader(
+                document,
+                root,
                 invoice
             );
 
-            writer.flush();
-            writer.close();
-
-            byte[] unformattedXml =
-                output.toByteArray();
-
-            return prettyPrint(
-                unformattedXml
+            appendInvoicePeriod(
+                document,
+                root,
+                invoice
             );
 
-        } catch (XMLStreamException exception) {
-            throw new IllegalStateException(
-                "Die XRechnung-XML konnte nicht erzeugt werden.",
-                exception
+            appendOrderReference(
+                document,
+                root,
+                invoice
+            );
+
+            appendSeller(
+                document,
+                root,
+                invoice.getSeller()
+            );
+
+            appendBuyer(
+                document,
+                root,
+                invoice.getBuyer()
+            );
+
+            appendPaymentMeans(
+                document,
+                root,
+                invoice
+            );
+
+            appendTaxTotal(
+                document,
+                root,
+                invoice
+            );
+
+            appendLegalMonetaryTotal(
+                document,
+                root,
+                invoice
+            );
+
+            appendInvoiceLines(
+                document,
+                root,
+                invoice
+            );
+
+            return transformToBytes(
+                document
             );
 
         } catch (Exception exception) {
             throw new IllegalStateException(
-                "Die XRechnung-XML konnte nicht geschrieben werden.",
+                "Die XRechnung "
+                    + safe(
+                    invoice.getInvoiceNumber()
+                )
+                    + " konnte nicht erzeugt werden.",
                 exception
             );
         }
     }
 
-    private void writeDocument(
-        XMLStreamWriter writer,
-        XRechnungDto invoice
-    ) throws XMLStreamException {
+    private DocumentBuilderFactory createDocumentBuilderFactory()
+        throws Exception {
 
-        writer.writeStartDocument(
-            StandardCharsets.UTF_8.name(),
-            "1.0"
+        DocumentBuilderFactory factory =
+            DocumentBuilderFactory.newInstance();
+
+        factory.setNamespaceAware(
+            true
         );
 
-        writer.writeCharacters(
-            "\n"
+        factory.setFeature(
+            "http://apache.org/xml/features/"
+                + "disallow-doctype-decl",
+            true
         );
 
-        writer.setPrefix(
-            "rsm",
-            RSM
+        factory.setFeature(
+            "http://xml.org/sax/features/"
+                + "external-general-entities",
+            false
         );
 
-        writer.setPrefix(
-            "ram",
-            RAM
+        factory.setFeature(
+            "http://xml.org/sax/features/"
+                + "external-parameter-entities",
+            false
         );
 
-        writer.setPrefix(
-            "udt",
-            UDT
+        factory.setFeature(
+            "http://apache.org/xml/features/"
+                + "nonvalidating/load-external-dtd",
+            false
         );
 
-        writer.setPrefix(
-            "qdt",
-            QDT
+        factory.setXIncludeAware(
+            false
         );
 
-        writer.writeStartElement(
-            "rsm",
-            "CrossIndustryInvoice",
-            RSM
+        factory.setExpandEntityReferences(
+            false
         );
 
-        writer.writeNamespace(
-            "rsm",
-            RSM
-        );
-
-        writer.writeNamespace(
-            "ram",
-            RAM
-        );
-
-        writer.writeNamespace(
-            "udt",
-            UDT
-        );
-
-        writer.writeNamespace(
-            "qdt",
-            QDT
-        );
-
-        writeDocumentContext(
-            writer
-        );
-
-        writeExchangedDocument(
-            writer,
-            invoice
-        );
-
-        writeSupplyChainTradeTransaction(
-            writer,
-            invoice
-        );
-
-        writer.writeEndElement();
-        writer.writeEndDocument();
+        return factory;
     }
 
-    private void writeDocumentContext(
-        XMLStreamWriter writer
-    ) throws XMLStreamException {
-
-        startRsm(
-            writer,
-            "ExchangedDocumentContext"
-        );
-
-        startRam(
-            writer,
-            "BusinessProcessSpecifiedDocumentContextParameter"
-        );
-
-        elementRam(
-            writer,
-            "ID",
-            DEFAULT_BUSINESS_PROCESS_ID
-        );
-
-        writer.writeEndElement();
-
-        startRam(
-            writer,
-            "GuidelineSpecifiedDocumentContextParameter"
-        );
-
-        elementRam(
-            writer,
-            "ID",
-            XRECHNUNG_GUIDELINE_ID
-        );
-
-        writer.writeEndElement();
-        writer.writeEndElement();
-    }
-
-    private void writeExchangedDocument(
-        XMLStreamWriter writer,
+    private void appendHeader(
+        Document document,
+        Element root,
         XRechnungDto invoice
-    ) throws XMLStreamException {
-
-        startRsm(
-            writer,
-            "ExchangedDocument"
+    ) {
+        appendTextElement(
+            document,
+            root,
+            CBC_NAMESPACE,
+            "cbc:CustomizationID",
+            defaultValue(
+                invoice.getSpecificationIdentifier(),
+                DEFAULT_SPECIFICATION_IDENTIFIER
+            )
         );
 
-        elementRam(
-            writer,
-            "ID",
+        appendTextElement(
+            document,
+            root,
+            CBC_NAMESPACE,
+            "cbc:ProfileID",
+            defaultValue(
+                invoice.getBusinessProcessId(),
+                DEFAULT_BUSINESS_PROCESS_ID
+            )
+        );
+
+        appendTextElement(
+            document,
+            root,
+            CBC_NAMESPACE,
+            "cbc:ID",
             invoice.getInvoiceNumber()
         );
 
-        elementRam(
-            writer,
-            "TypeCode",
+        appendDateElement(
+            document,
+            root,
+            "cbc:IssueDate",
+            invoice.getInvoiceDate()
+        );
+
+        appendDateElement(
+            document,
+            root,
+            "cbc:DueDate",
+            invoice.getDueDate()
+        );
+
+        appendTextElement(
+            document,
+            root,
+            CBC_NAMESPACE,
+            "cbc:InvoiceTypeCode",
             defaultValue(
                 invoice.getInvoiceTypeCode(),
                 DEFAULT_INVOICE_TYPE_CODE
             )
         );
 
-        startRam(
-            writer,
-            "IssueDateTime"
+        appendOptionalTextElement(
+            document,
+            root,
+            CBC_NAMESPACE,
+            "cbc:Note",
+            invoice.getNotes()
         );
 
-        dateElement(
-            writer,
-            "DateTimeString",
-            invoice.getInvoiceDate()
+        appendTextElement(
+            document,
+            root,
+            CBC_NAMESPACE,
+            "cbc:DocumentCurrencyCode",
+            currency(
+                invoice
+            )
         );
 
-        writer.writeEndElement();
-        writer.writeEndElement();
+        if (invoice.getTaxPointDate() != null) {
+            appendDateElement(
+                document,
+                root,
+                "cbc:TaxPointDate",
+                invoice.getTaxPointDate()
+            );
+        }
+
+        appendTextElement(
+            document,
+            root,
+            CBC_NAMESPACE,
+            "cbc:BuyerReference",
+            invoice.getBuyerReference()
+        );
     }
 
-    private void writeSupplyChainTradeTransaction(
-        XMLStreamWriter writer,
+    private void appendInvoicePeriod(
+        Document document,
+        Element root,
         XRechnungDto invoice
-    ) throws XMLStreamException {
+    ) {
+        if (invoice.getServiceDate() == null) {
+            return;
+        }
 
-        startRsm(
-            writer,
-            "SupplyChainTradeTransaction"
+        Element invoicePeriod =
+            appendElement(
+                document,
+                root,
+                CAC_NAMESPACE,
+                "cac:InvoicePeriod"
+            );
+
+        appendDateElement(
+            document,
+            invoicePeriod,
+            "cbc:StartDate",
+            invoice.getServiceDate()
         );
 
-        writeLineItems(
-            writer,
-            invoice
+        appendDateElement(
+            document,
+            invoicePeriod,
+            "cbc:EndDate",
+            invoice.getServiceDate()
         );
-
-        writeHeaderTradeAgreement(
-            writer,
-            invoice
-        );
-
-        writeHeaderTradeDelivery(
-            writer,
-            invoice
-        );
-
-        writeHeaderTradeSettlement(
-            writer,
-            invoice
-        );
-
-        writer.writeEndElement();
     }
 
-    private void writeLineItems(
-        XMLStreamWriter writer,
+    private void appendOrderReference(
+        Document document,
+        Element root,
         XRechnungDto invoice
-    ) throws XMLStreamException {
+    ) {
+        if (!notBlank(
+            invoice.getOrderReference()
+        )) {
+            return;
+        }
+
+        Element orderReference =
+            appendElement(
+                document,
+                root,
+                CAC_NAMESPACE,
+                "cac:OrderReference"
+            );
+
+        appendTextElement(
+            document,
+            orderReference,
+            CBC_NAMESPACE,
+            "cbc:ID",
+            invoice.getOrderReference()
+        );
+    }
+
+    private void appendSeller(
+        Document document,
+        Element root,
+        XRechnungSellerDto seller
+    ) {
+        requireNotNull(
+            seller,
+            "Verkäufer"
+        );
+
+        Element supplierParty =
+            appendElement(
+                document,
+                root,
+                CAC_NAMESPACE,
+                "cac:AccountingSupplierParty"
+            );
+
+        Element party =
+            appendElement(
+                document,
+                supplierParty,
+                CAC_NAMESPACE,
+                "cac:Party"
+            );
+
+        appendEndpointId(
+            document,
+            party,
+            seller.getElectronicAddress(),
+            seller.getElectronicAddressScheme()
+        );
+
+        Element partyName =
+            appendElement(
+                document,
+                party,
+                CAC_NAMESPACE,
+                "cac:PartyName"
+            );
+
+        appendTextElement(
+            document,
+            partyName,
+            CBC_NAMESPACE,
+            "cbc:Name",
+            seller.getName()
+        );
+
+        appendPostalAddress(
+            document,
+            party,
+            seller.getStreet(),
+            seller.getZipCode(),
+            seller.getCity(),
+            seller.getCountry()
+        );
+
+        appendSellerTaxScheme(
+            document,
+            party,
+            seller
+        );
+
+        Element legalEntity =
+            appendElement(
+                document,
+                party,
+                CAC_NAMESPACE,
+                "cac:PartyLegalEntity"
+            );
+
+        appendTextElement(
+            document,
+            legalEntity,
+            CBC_NAMESPACE,
+            "cbc:RegistrationName",
+            seller.getName()
+        );
+
+        appendSellerContact(
+            document,
+            party,
+            seller
+        );
+    }
+
+    private void appendSellerTaxScheme(
+        Document document,
+        Element party,
+        XRechnungSellerDto seller
+    ) {
+        String vatId =
+            normalize(
+                seller.getVatId()
+            );
+
+        if (vatId != null) {
+            Element taxScheme =
+                appendElement(
+                    document,
+                    party,
+                    CAC_NAMESPACE,
+                    "cac:PartyTaxScheme"
+                );
+
+            appendTextElement(
+                document,
+                taxScheme,
+                CBC_NAMESPACE,
+                "cbc:CompanyID",
+                vatId
+            );
+
+            Element vatScheme =
+                appendElement(
+                    document,
+                    taxScheme,
+                    CAC_NAMESPACE,
+                    "cac:TaxScheme"
+                );
+
+            appendTextElement(
+                document,
+                vatScheme,
+                CBC_NAMESPACE,
+                "cbc:ID",
+                "VAT"
+            );
+        }
+
+        String taxNumber =
+            normalize(
+                seller.getTaxNumber()
+            );
+
+        if (taxNumber != null) {
+            Element taxScheme =
+                appendElement(
+                    document,
+                    party,
+                    CAC_NAMESPACE,
+                    "cac:PartyTaxScheme"
+                );
+
+            appendTextElement(
+                document,
+                taxScheme,
+                CBC_NAMESPACE,
+                "cbc:CompanyID",
+                taxNumber
+            );
+
+            Element fiscalScheme =
+                appendElement(
+                    document,
+                    taxScheme,
+                    CAC_NAMESPACE,
+                    "cac:TaxScheme"
+                );
+
+            appendTextElement(
+                document,
+                fiscalScheme,
+                CBC_NAMESPACE,
+                "cbc:ID",
+                "FC"
+            );
+        }
+    }
+
+    private void appendSellerContact(
+        Document document,
+        Element party,
+        XRechnungSellerDto seller
+    ) {
+        if (!notBlank(
+            seller.getContactPerson()
+        )
+            && !notBlank(
+            seller.getPhone()
+        )
+            && !notBlank(
+            seller.getEmail()
+        )) {
+
+            return;
+        }
+
+        Element contact =
+            appendElement(
+                document,
+                party,
+                CAC_NAMESPACE,
+                "cac:Contact"
+            );
+
+        appendOptionalTextElement(
+            document,
+            contact,
+            CBC_NAMESPACE,
+            "cbc:Name",
+            seller.getContactPerson()
+        );
+
+        appendOptionalTextElement(
+            document,
+            contact,
+            CBC_NAMESPACE,
+            "cbc:Telephone",
+            seller.getPhone()
+        );
+
+        appendOptionalTextElement(
+            document,
+            contact,
+            CBC_NAMESPACE,
+            "cbc:ElectronicMail",
+            seller.getEmail()
+        );
+    }
+
+    private void appendBuyer(
+        Document document,
+        Element root,
+        XRechnungBuyerDto buyer
+    ) {
+        requireNotNull(
+            buyer,
+            "Käufer"
+        );
+
+        Element customerParty =
+            appendElement(
+                document,
+                root,
+                CAC_NAMESPACE,
+                "cac:AccountingCustomerParty"
+            );
+
+        Element party =
+            appendElement(
+                document,
+                customerParty,
+                CAC_NAMESPACE,
+                "cac:Party"
+            );
+
+        appendEndpointId(
+            document,
+            party,
+            buyer.getElectronicAddress(),
+            buyer.getElectronicAddressScheme()
+        );
+
+        Element partyName =
+            appendElement(
+                document,
+                party,
+                CAC_NAMESPACE,
+                "cac:PartyName"
+            );
+
+        appendTextElement(
+            document,
+            partyName,
+            CBC_NAMESPACE,
+            "cbc:Name",
+            buyer.getName()
+        );
+
+        appendPostalAddress(
+            document,
+            party,
+            buyer.getStreet(),
+            buyer.getZipCode(),
+            buyer.getCity(),
+            buyer.getCountry()
+        );
+
+        Element legalEntity =
+            appendElement(
+                document,
+                party,
+                CAC_NAMESPACE,
+                "cac:PartyLegalEntity"
+            );
+
+        appendTextElement(
+            document,
+            legalEntity,
+            CBC_NAMESPACE,
+            "cbc:RegistrationName",
+            buyer.getName()
+        );
+    }
+
+    private void appendEndpointId(
+        Document document,
+        Element party,
+        String address,
+        String scheme
+    ) {
+        if (!notBlank(
+            address
+        )) {
+            return;
+        }
+
+        Element endpointId =
+            appendTextElement(
+                document,
+                party,
+                CBC_NAMESPACE,
+                "cbc:EndpointID",
+                address
+            );
+
+        endpointId.setAttribute(
+            "schemeID",
+            defaultValue(
+                scheme,
+                DEFAULT_ELECTRONIC_ADDRESS_SCHEME
+            )
+        );
+    }
+
+    private void appendPostalAddress(
+        Document document,
+        Element party,
+        String street,
+        String zipCode,
+        String city,
+        String country
+    ) {
+        Element postalAddress =
+            appendElement(
+                document,
+                party,
+                CAC_NAMESPACE,
+                "cac:PostalAddress"
+            );
+
+        appendTextElement(
+            document,
+            postalAddress,
+            CBC_NAMESPACE,
+            "cbc:StreetName",
+            street
+        );
+
+        appendTextElement(
+            document,
+            postalAddress,
+            CBC_NAMESPACE,
+            "cbc:CityName",
+            city
+        );
+
+        appendTextElement(
+            document,
+            postalAddress,
+            CBC_NAMESPACE,
+            "cbc:PostalZone",
+            zipCode
+        );
+
+        Element countryElement =
+            appendElement(
+                document,
+                postalAddress,
+                CAC_NAMESPACE,
+                "cac:Country"
+            );
+
+        appendTextElement(
+            document,
+            countryElement,
+            CBC_NAMESPACE,
+            "cbc:IdentificationCode",
+            country
+        );
+    }
+
+    private void appendPaymentMeans(
+        Document document,
+        Element root,
+        XRechnungDto invoice
+    ) {
+        Element paymentMeans =
+            appendElement(
+                document,
+                root,
+                CAC_NAMESPACE,
+                "cac:PaymentMeans"
+            );
+
+        appendTextElement(
+            document,
+            paymentMeans,
+            CBC_NAMESPACE,
+            "cbc:PaymentMeansCode",
+            defaultValue(
+                invoice.getPaymentMeansCode(),
+                DEFAULT_PAYMENT_MEANS_CODE
+            )
+        );
+
+        appendOptionalTextElement(
+            document,
+            paymentMeans,
+            CBC_NAMESPACE,
+            "cbc:PaymentID",
+            invoice.getPaymentReference()
+        );
+
+        Element payeeAccount =
+            appendElement(
+                document,
+                paymentMeans,
+                CAC_NAMESPACE,
+                "cac:PayeeFinancialAccount"
+            );
+
+        appendTextElement(
+            document,
+            payeeAccount,
+            CBC_NAMESPACE,
+            "cbc:ID",
+            normalizeIban(
+                invoice.getIban()
+            )
+        );
+
+        appendOptionalTextElement(
+            document,
+            payeeAccount,
+            CBC_NAMESPACE,
+            "cbc:Name",
+            invoice.getAccountHolder()
+        );
+
+        if (notBlank(
+            invoice.getBic()
+        )) {
+            Element financialInstitution =
+                appendElement(
+                    document,
+                    payeeAccount,
+                    CAC_NAMESPACE,
+                    "cac:FinancialInstitutionBranch"
+                );
+
+            appendTextElement(
+                document,
+                financialInstitution,
+                CBC_NAMESPACE,
+                "cbc:ID",
+                invoice.getBic()
+            );
+        }
+    }
+
+    private void appendTaxTotal(
+        Document document,
+        Element root,
+        XRechnungDto invoice
+    ) {
+        List<TaxBreakdown> taxBreakdowns =
+            calculateTaxBreakdowns(
+                invoice
+            );
+
+        BigDecimal totalTaxAmount =
+            taxBreakdowns.stream()
+                .map(
+                    TaxBreakdown::taxAmount
+                )
+                .reduce(
+                    BigDecimal.ZERO,
+                    BigDecimal::add
+                )
+                .setScale(
+                    MONEY_SCALE,
+                    MONEY_ROUNDING
+                );
+
+        validateTotalTaxAmount(
+            invoice,
+            totalTaxAmount
+        );
+
+        Element taxTotal =
+            appendElement(
+                document,
+                root,
+                CAC_NAMESPACE,
+                "cac:TaxTotal"
+            );
+
+        appendAmountElement(
+            document,
+            taxTotal,
+            "cbc:TaxAmount",
+            totalTaxAmount,
+            currency(
+                invoice
+            )
+        );
+
+        for (
+            TaxBreakdown breakdown :
+            taxBreakdowns
+        ) {
+            appendTaxSubtotal(
+                document,
+                taxTotal,
+                invoice,
+                breakdown
+            );
+        }
+    }
+
+    private void appendTaxSubtotal(
+        Document document,
+        Element taxTotal,
+        XRechnungDto invoice,
+        TaxBreakdown breakdown
+    ) {
+        Element taxSubtotal =
+            appendElement(
+                document,
+                taxTotal,
+                CAC_NAMESPACE,
+                "cac:TaxSubtotal"
+            );
+
+        appendAmountElement(
+            document,
+            taxSubtotal,
+            "cbc:TaxableAmount",
+            breakdown.taxableAmount(),
+            currency(
+                invoice
+            )
+        );
+
+        appendAmountElement(
+            document,
+            taxSubtotal,
+            "cbc:TaxAmount",
+            breakdown.taxAmount(),
+            currency(
+                invoice
+            )
+        );
+
+        Element taxCategory =
+            appendElement(
+                document,
+                taxSubtotal,
+                CAC_NAMESPACE,
+                "cac:TaxCategory"
+            );
+
+        appendTextElement(
+            document,
+            taxCategory,
+            CBC_NAMESPACE,
+            "cbc:ID",
+            breakdown.key()
+                .categoryCode()
+        );
+
+        if (requiresVatRate(
+            breakdown.key()
+                .categoryCode()
+        )) {
+            appendDecimalElement(
+                document,
+                taxCategory,
+                "cbc:Percent",
+                breakdown.key()
+                    .vatRate(),
+                RATE_SCALE
+            );
+        }
+
+        Element taxScheme =
+            appendElement(
+                document,
+                taxCategory,
+                CAC_NAMESPACE,
+                "cac:TaxScheme"
+            );
+
+        appendTextElement(
+            document,
+            taxScheme,
+            CBC_NAMESPACE,
+            "cbc:ID",
+            "VAT"
+        );
+    }
+
+    private List<TaxBreakdown> calculateTaxBreakdowns(
+        XRechnungDto invoice
+    ) {
+        Map<TaxKey, BigDecimal> taxableAmounts =
+            new LinkedHashMap<>();
 
         for (
             XRechnungItemDto item :
             invoice.getItems()
         ) {
-            startRam(
-                writer,
-                "IncludedSupplyChainTradeLineItem"
-            );
-
-            startRam(
-                writer,
-                "AssociatedDocumentLineDocument"
-            );
-
-            elementRam(
-                writer,
-                "LineID",
-                String.valueOf(
-                    item.getPositionNumber()
-                )
-            );
-
-            writer.writeEndElement();
-
-            startRam(
-                writer,
-                "SpecifiedTradeProduct"
-            );
-
-            optionalElementRam(
-                writer,
-                "SellerAssignedID",
-                item.getProductNumber()
-            );
-
-            elementRam(
-                writer,
-                "Name",
-                item.getName()
-            );
-
-            optionalElementRam(
-                writer,
-                "Description",
-                item.getDescription()
-            );
-
-            writer.writeEndElement();
-
-            startRam(
-                writer,
-                "SpecifiedLineTradeAgreement"
-            );
-
-            startRam(
-                writer,
-                "NetPriceProductTradePrice"
-            );
-
-            amountElement(
-                writer,
-                "ChargeAmount",
-                item.getUnitPriceNet(),
-                null
-            );
-
-            writer.writeEndElement();
-            writer.writeEndElement();
-
-            startRam(
-                writer,
-                "SpecifiedLineTradeDelivery"
-            );
-
-            quantityElement(
-                writer,
-                "BilledQuantity",
-                item.getQuantity(),
-                normalizeUnitCode(
-                    item.getUnit()
-                )
-            );
-
-            writer.writeEndElement();
-
-            startRam(
-                writer,
-                "SpecifiedLineTradeSettlement"
-            );
-
-            startRam(
-                writer,
-                "ApplicableTradeTax"
-            );
-
-            elementRam(
-                writer,
-                "TypeCode",
-                "VAT"
-            );
-
-            elementRam(
-                writer,
-                "CategoryCode",
+            String categoryCode =
                 defaultValue(
                     item.getTaxCategoryCode(),
-                    DEFAULT_TAX_CATEGORY_CODE
-                )
+                    DEFAULT_TAX_CATEGORY
+                );
+
+            BigDecimal vatRate =
+                normalizeRate(
+                    item.getVatRate()
+                );
+
+            TaxKey key =
+                new TaxKey(
+                    categoryCode,
+                    vatRate
+                );
+
+            BigDecimal lineNet =
+                money(
+                    item.getLineNet()
+                );
+
+            taxableAmounts.merge(
+                key,
+                lineNet,
+                BigDecimal::add
             );
-
-            elementRam(
-                writer,
-                "RateApplicablePercent",
-                decimal(
-                    item.getVatRate(),
-                    2
-                )
-            );
-
-            writer.writeEndElement();
-
-            startRam(
-                writer,
-                "SpecifiedTradeSettlementLineMonetarySummation"
-            );
-
-            amountElement(
-                writer,
-                "LineTotalAmount",
-                item.getLineNet(),
-                null
-            );
-
-            writer.writeEndElement();
-            writer.writeEndElement();
-            writer.writeEndElement();
         }
+
+        List<TaxBreakdown> result =
+            new ArrayList<>();
+
+        for (
+            Map.Entry<TaxKey, BigDecimal> entry :
+            taxableAmounts.entrySet()
+        ) {
+            TaxKey key =
+                entry.getKey();
+
+            BigDecimal taxableAmount =
+                money(
+                    entry.getValue()
+                );
+
+            BigDecimal taxAmount =
+                calculateTaxAmount(
+                    taxableAmount,
+                    key.vatRate(),
+                    key.categoryCode()
+                );
+
+            result.add(
+                new TaxBreakdown(
+                    key,
+                    taxableAmount,
+                    taxAmount
+                )
+            );
+        }
+
+        result.sort(
+            Comparator
+                .comparing(
+                    (TaxBreakdown value) ->
+                        value.key()
+                            .categoryCode()
+                )
+                .thenComparing(
+                    value ->
+                        value.key()
+                            .vatRate()
+                )
+        );
+
+        return result;
     }
 
-    private void writeHeaderTradeAgreement(
-        XMLStreamWriter writer,
-        XRechnungDto invoice
-    ) throws XMLStreamException {
-
-        startRam(
-            writer,
-            "ApplicableHeaderTradeAgreement"
-        );
-
-        // BT-10 Käuferreferenz
-        elementRam(
-            writer,
-            "BuyerReference",
-            invoice.getBuyerReference()
-        );
-
-        writeSeller(
-            writer,
-            invoice.getSeller()
-        );
-
-        writeBuyer(
-            writer,
-            invoice.getBuyer()
-        );
-
-        // BT-13 Bestellreferenz
-        if (notBlank(
-            invoice.getOrderReference()
+    private BigDecimal calculateTaxAmount(
+        BigDecimal taxableAmount,
+        BigDecimal vatRate,
+        String categoryCode
+    ) {
+        if (!requiresVatRate(
+            categoryCode
         )) {
-            startRam(
-                writer,
-                "BuyerOrderReferencedDocument"
-            );
-
-            elementRam(
-                writer,
-                "IssuerAssignedID",
-                invoice.getOrderReference()
-            );
-
-            writer.writeEndElement();
+            return BigDecimal.ZERO
+                .setScale(
+                    MONEY_SCALE,
+                    MONEY_ROUNDING
+                );
         }
 
-        writer.writeEndElement();
+        return taxableAmount
+            .multiply(
+                vatRate
+            )
+            .divide(
+                BigDecimal.valueOf(
+                    100
+                ),
+                MONEY_SCALE,
+                MONEY_ROUNDING
+            );
     }
 
-    private void writeSeller(
-        XMLStreamWriter writer,
-        XRechnungSellerDto seller
-    ) throws XMLStreamException {
+    private boolean requiresVatRate(
+        String categoryCode
+    ) {
+        String normalized =
+            defaultValue(
+                categoryCode,
+                DEFAULT_TAX_CATEGORY
+            ).toUpperCase(
+                Locale.ROOT
+            );
 
-        startRam(
-            writer,
-            "SellerTradeParty"
-        );
-
-        elementRam(
-            writer,
-            "Name",
-            seller.getName()
-        );
-
-        if (notBlank(
-            seller.getContactPerson()
+        return "S".equals(
+            normalized
         )
-            || notBlank(
-            seller.getPhone()
-        )
-            || notBlank(
-            seller.getEmail()
-        )) {
-
-            startRam(
-                writer,
-                "DefinedTradeContact"
-            );
-
-            optionalElementRam(
-                writer,
-                "PersonName",
-                seller.getContactPerson()
-            );
-
-            if (notBlank(
-                seller.getPhone()
-            )) {
-                startRam(
-                    writer,
-                    "TelephoneUniversalCommunication"
-                );
-
-                elementRam(
-                    writer,
-                    "CompleteNumber",
-                    seller.getPhone()
-                );
-
-                writer.writeEndElement();
-            }
-
-            if (notBlank(
-                seller.getEmail()
-            )) {
-                startRam(
-                    writer,
-                    "EmailURIUniversalCommunication"
-                );
-
-                elementRam(
-                    writer,
-                    "URIID",
-                    seller.getEmail()
-                );
-
-                writer.writeEndElement();
-            }
-
-            writer.writeEndElement();
-        }
-
-        startRam(
-            writer,
-            "PostalTradeAddress"
+            || "Z".equals(
+            normalized
         );
-
-        elementRam(
-            writer,
-            "PostcodeCode",
-            seller.getZipCode()
-        );
-
-        elementRam(
-            writer,
-            "LineOne",
-            seller.getStreet()
-        );
-
-        elementRam(
-            writer,
-            "CityName",
-            seller.getCity()
-        );
-
-        elementRam(
-            writer,
-            "CountryID",
-            seller.getCountry()
-        );
-
-        writer.writeEndElement();
-
-        // BT-34 elektronische Adresse des Verkäufers
-        if (notBlank(
-            seller.getElectronicAddress()
-        )) {
-            startRam(
-                writer,
-                "URIUniversalCommunication"
-            );
-
-            writer.writeStartElement(
-                "ram",
-                "URIID",
-                RAM
-            );
-
-            writer.writeAttribute(
-                "schemeID",
-                defaultValue(
-                    seller.getElectronicAddressScheme(),
-                    "EM"
-                )
-            );
-
-            writer.writeCharacters(
-                seller.getElectronicAddress()
-            );
-
-            writer.writeEndElement();
-            writer.writeEndElement();
-        }
-
-        if (notBlank(
-            seller.getVatId()
-        )) {
-            startRam(
-                writer,
-                "SpecifiedTaxRegistration"
-            );
-
-            writer.writeStartElement(
-                "ram",
-                "ID",
-                RAM
-            );
-
-            writer.writeAttribute(
-                "schemeID",
-                "VA"
-            );
-
-            writer.writeCharacters(
-                seller.getVatId()
-            );
-
-            writer.writeEndElement();
-            writer.writeEndElement();
-        }
-
-        if (notBlank(
-            seller.getTaxNumber()
-        )) {
-            startRam(
-                writer,
-                "SpecifiedTaxRegistration"
-            );
-
-            writer.writeStartElement(
-                "ram",
-                "ID",
-                RAM
-            );
-
-            writer.writeAttribute(
-                "schemeID",
-                "FC"
-            );
-
-            writer.writeCharacters(
-                seller.getTaxNumber()
-            );
-
-            writer.writeEndElement();
-            writer.writeEndElement();
-        }
-
-        writer.writeEndElement();
     }
 
-    private void writeBuyer(
-        XMLStreamWriter writer,
-        XRechnungBuyerDto buyer
-    ) throws XMLStreamException {
-
-        startRam(
-            writer,
-            "BuyerTradeParty"
-        );
-
-        if (notBlank(
-            buyer.getLeitwegId()
-        )) {
-            elementRam(
-                writer,
-                "ID",
-                buyer.getLeitwegId()
-            );
-        }
-
-        elementRam(
-            writer,
-            "Name",
-            buyer.getName()
-        );
-
-        startRam(
-            writer,
-            "PostalTradeAddress"
-        );
-
-        elementRam(
-            writer,
-            "PostcodeCode",
-            buyer.getZipCode()
-        );
-
-        elementRam(
-            writer,
-            "LineOne",
-            buyer.getStreet()
-        );
-
-        elementRam(
-            writer,
-            "CityName",
-            buyer.getCity()
-        );
-
-        elementRam(
-            writer,
-            "CountryID",
-            buyer.getCountry()
-        );
-
-        writer.writeEndElement();
-
-        // BT-49 elektronische Adresse des Käufers
-        if (notBlank(
-            buyer.getElectronicAddress()
-        )) {
-            startRam(
-                writer,
-                "URIUniversalCommunication"
-            );
-
-            writer.writeStartElement(
-                "ram",
-                "URIID",
-                RAM
-            );
-
-            if (notBlank(
-                buyer.getElectronicAddressScheme()
-            )) {
-                writer.writeAttribute(
-                    "schemeID",
-                    buyer.getElectronicAddressScheme()
-                );
-            }
-
-            writer.writeCharacters(
-                buyer.getElectronicAddress()
-            );
-
-            writer.writeEndElement();
-            writer.writeEndElement();
-        }
-
-        writer.writeEndElement();
-    }
-
-    private void writeHeaderTradeDelivery(
-        XMLStreamWriter writer,
-        XRechnungDto invoice
-    ) throws XMLStreamException {
-
-        startRam(
-            writer,
-            "ApplicableHeaderTradeDelivery"
-        );
-
-        LocalDate serviceDate =
-            invoice.getServiceDate();
-
-        if (serviceDate != null) {
-            startRam(
-                writer,
-                "ActualDeliverySupplyChainEvent"
-            );
-
-            startRam(
-                writer,
-                "OccurrenceDateTime"
-            );
-
-            dateElement(
-                writer,
-                "DateTimeString",
-                serviceDate
-            );
-
-            writer.writeEndElement();
-            writer.writeEndElement();
-        }
-
-        writer.writeEndElement();
-    }
-
-    private void writeHeaderTradeSettlement(
-        XMLStreamWriter writer,
-        XRechnungDto invoice
-    ) throws XMLStreamException {
-
+    private void validateTotalTaxAmount(
+        XRechnungDto invoice,
+        BigDecimal calculatedTaxAmount
+    ) {
         XRechnungTotalsDto totals =
             invoice.getTotals();
 
-        String currency =
-            defaultValue(
-                invoice.getCurrencyCode(),
-                DEFAULT_CURRENCY_CODE
+        requireNotNull(
+            totals,
+            "Rechnungssummen"
+        );
+
+        BigDecimal mappedTaxAmount =
+            money(
+                totals.getTaxAmount()
             );
 
-        String categoryCode =
-            resolveTaxCategory(
-                invoice.getItems()
+        if (mappedTaxAmount.compareTo(
+            calculatedTaxAmount
+        ) != 0) {
+            throw new IllegalStateException(
+                "Der Steuerbetrag der Rechnung "
+                    + invoice.getInvoiceNumber()
+                    + " stimmt nicht mit der Summe "
+                    + "der Steueraufschlüsselungen überein. "
+                    + "Gespeichert: "
+                    + amount(
+                    mappedTaxAmount
+                )
+                    + ", berechnet: "
+                    + amount(
+                    calculatedTaxAmount
+                )
+                    + "."
+            );
+        }
+    }
+
+    private void appendLegalMonetaryTotal(
+        Document document,
+        Element root,
+        XRechnungDto invoice
+    ) {
+        XRechnungTotalsDto totals =
+            invoice.getTotals();
+
+        requireNotNull(
+            totals,
+            "Rechnungssummen"
+        );
+
+        BigDecimal subtotalNet =
+            money(
+                totals.getSubtotalNet()
             );
 
-        BigDecimal taxRate =
-            resolveTaxRate(
-                invoice.getItems()
+        BigDecimal taxAmount =
+            money(
+                totals.getTaxAmount()
             );
 
-        startRam(
-            writer,
-            "ApplicableHeaderTradeSettlement"
+        BigDecimal totalGross =
+            money(
+                totals.getTotalGross()
+            );
+
+        validateMonetaryTotals(
+            invoice,
+            subtotalNet,
+            taxAmount,
+            totalGross
         );
 
-        // BT-83 Zahlungsreferenz
-        optionalElementRam(
-            writer,
-            "PaymentReference",
-            invoice.getPaymentReference()
-        );
+        Element monetaryTotal =
+            appendElement(
+                document,
+                root,
+                CAC_NAMESPACE,
+                "cac:LegalMonetaryTotal"
+            );
 
-        // BT-5 Rechnungswährung
-        elementRam(
-            writer,
-            "InvoiceCurrencyCode",
-            currency
-        );
-
-        writePaymentMeans(
-            writer,
-            invoice
-        );
-
-        startRam(
-            writer,
-            "ApplicableTradeTax"
-        );
-
-        amountElement(
-            writer,
-            "CalculatedAmount",
-            totals.getTaxAmount(),
-            null
-        );
-
-        elementRam(
-            writer,
-            "TypeCode",
-            "VAT"
-        );
-
-        amountElement(
-            writer,
-            "BasisAmount",
-            totals.getSubtotalNet(),
-            null
-        );
-
-        elementRam(
-            writer,
-            "CategoryCode",
-            categoryCode
-        );
-
-        elementRam(
-            writer,
-            "RateApplicablePercent",
-            decimal(
-                taxRate,
-                2
+        appendAmountElement(
+            document,
+            monetaryTotal,
+            "cbc:LineExtensionAmount",
+            subtotalNet,
+            currency(
+                invoice
             )
         );
 
-        writer.writeEndElement();
-
-        startRam(
-            writer,
-            "SpecifiedTradePaymentTerms"
+        appendAmountElement(
+            document,
+            monetaryTotal,
+            "cbc:TaxExclusiveAmount",
+            subtotalNet,
+            currency(
+                invoice
+            )
         );
 
-        startRam(
-            writer,
-            "DueDateDateTime"
+        appendAmountElement(
+            document,
+            monetaryTotal,
+            "cbc:TaxInclusiveAmount",
+            totalGross,
+            currency(
+                invoice
+            )
         );
 
-        dateElement(
-            writer,
-            "DateTimeString",
-            invoice.getDueDate()
+        appendAmountElement(
+            document,
+            monetaryTotal,
+            "cbc:PayableAmount",
+            totalGross,
+            currency(
+                invoice
+            )
+        );
+    }
+
+    private void validateMonetaryTotals(
+        XRechnungDto invoice,
+        BigDecimal subtotalNet,
+        BigDecimal taxAmount,
+        BigDecimal totalGross
+    ) {
+        BigDecimal calculatedSubtotal =
+            invoice.getItems()
+                .stream()
+                .map(
+                    XRechnungItemDto::getLineNet
+                )
+                .filter(
+                    Objects::nonNull
+                )
+                .map(
+                    this::money
+                )
+                .reduce(
+                    BigDecimal.ZERO,
+                    BigDecimal::add
+                )
+                .setScale(
+                    MONEY_SCALE,
+                    MONEY_ROUNDING
+                );
+
+        if (subtotalNet.compareTo(
+            calculatedSubtotal
+        ) != 0) {
+            throw new IllegalStateException(
+                "Die Nettosumme der Rechnung "
+                    + invoice.getInvoiceNumber()
+                    + " stimmt nicht mit der Summe "
+                    + "der Positionsnettos überein. "
+                    + "Gespeichert: "
+                    + amount(
+                    subtotalNet
+                )
+                    + ", berechnet: "
+                    + amount(
+                    calculatedSubtotal
+                )
+                    + "."
+            );
+        }
+
+        BigDecimal calculatedGross =
+            subtotalNet
+                .add(
+                    taxAmount
+                )
+                .setScale(
+                    MONEY_SCALE,
+                    MONEY_ROUNDING
+                );
+
+        if (totalGross.compareTo(
+            calculatedGross
+        ) != 0) {
+            throw new IllegalStateException(
+                "Die Bruttosumme der Rechnung "
+                    + invoice.getInvoiceNumber()
+                    + " stimmt nicht mit Nettosumme "
+                    + "plus Steuerbetrag überein. "
+                    + "Gespeichert: "
+                    + amount(
+                    totalGross
+                )
+                    + ", berechnet: "
+                    + amount(
+                    calculatedGross
+                )
+                    + "."
+            );
+        }
+    }
+
+    private void appendInvoiceLines(
+        Document document,
+        Element root,
+        XRechnungDto invoice
+    ) {
+        for (
+            XRechnungItemDto item :
+            invoice.getItems()
+        ) {
+            appendInvoiceLine(
+                document,
+                root,
+                invoice,
+                item
+            );
+        }
+    }
+
+    private void appendInvoiceLine(
+        Document document,
+        Element root,
+        XRechnungDto invoice,
+        XRechnungItemDto item
+    ) {
+        Element invoiceLine =
+            appendElement(
+                document,
+                root,
+                CAC_NAMESPACE,
+                "cac:InvoiceLine"
+            );
+
+        appendTextElement(
+            document,
+            invoiceLine,
+            CBC_NAMESPACE,
+            "cbc:ID",
+            String.valueOf(
+                item.getPositionNumber()
+            )
         );
 
-        writer.writeEndElement();
-        writer.writeEndElement();
+        Element quantity =
+            appendDecimalElement(
+                document,
+                invoiceLine,
+                "cbc:InvoicedQuantity",
+                item.getQuantity(),
+                QUANTITY_SCALE
+            );
 
-        startRam(
-            writer,
-            "SpecifiedTradeSettlementHeaderMonetarySummation"
+        String unitCode =
+            normalizeUnitCode(
+                item.getUnit()
+            );
+
+        quantity.setAttribute(
+            "unitCode",
+            unitCode
         );
 
-        amountElement(
-            writer,
-            "LineTotalAmount",
-            totals.getSubtotalNet(),
-            null
+        appendAmountElement(
+            document,
+            invoiceLine,
+            "cbc:LineExtensionAmount",
+            money(
+                item.getLineNet()
+            ),
+            currency(
+                invoice
+            )
         );
 
-        amountElement(
-            writer,
-            "TaxBasisTotalAmount",
-            totals.getSubtotalNet(),
-            null
+        appendLineAllowance(
+            document,
+            invoiceLine,
+            invoice,
+            item
         );
 
-        amountElement(
-            writer,
-            "TaxTotalAmount",
-            totals.getTaxAmount(),
+        appendItem(
+            document,
+            invoiceLine,
+            item
+        );
+
+        appendPrice(
+            document,
+            invoiceLine,
+            invoice,
+            item
+        );
+    }
+
+    private void appendLineAllowance(
+        Document document,
+        Element invoiceLine,
+        XRechnungDto invoice,
+        XRechnungItemDto item
+    ) {
+        BigDecimal discountPercent =
+            zeroIfNull(
+                item.getDiscountPercent()
+            );
+
+        if (discountPercent.compareTo(
+            BigDecimal.ZERO
+        ) <= 0) {
+            return;
+        }
+
+        BigDecimal quantity =
+            zeroIfNull(
+                item.getQuantity()
+            );
+
+        BigDecimal unitPriceNet =
+            zeroIfNull(
+                item.getUnitPriceNet()
+            );
+
+        /*
+         * Basisbetrag vor Positionsrabatt.
+         *
+         * 3 × 95,00 EUR = 285,00 EUR
+         */
+        BigDecimal baseAmount =
+            quantity
+                .multiply(
+                    unitPriceNet
+                )
+                .setScale(
+                    MONEY_SCALE,
+                    MONEY_ROUNDING
+                );
+
+        /*
+         * Rabattbetrag unmittelbar aus Basisbetrag
+         * und Prozentsatz berechnen.
+         *
+         * 285,00 × 10 / 100 = 28,50 EUR
+         */
+        BigDecimal allowanceAmount =
+            baseAmount
+                .multiply(
+                    discountPercent
+                )
+                .divide(
+                    BigDecimal.valueOf(
+                        100
+                    ),
+                    MONEY_SCALE,
+                    MONEY_ROUNDING
+                );
+
+        /*
+         * Kontrollieren, ob der ausgewiesene Rabatt
+         * zum gespeicherten Positionsnetto passt.
+         */
+        BigDecimal expectedLineNet =
+            baseAmount
+                .subtract(
+                    allowanceAmount
+                )
+                .setScale(
+                    MONEY_SCALE,
+                    MONEY_ROUNDING
+                );
+
+        BigDecimal storedLineNet =
+            money(
+                item.getLineNet()
+            );
+
+        if (expectedLineNet.compareTo(
+            storedLineNet
+        ) != 0) {
+            throw new IllegalStateException(
+                "Der Positionsrabatt der Position "
+                    + item.getPositionNumber()
+                    + " ist nicht konsistent. "
+                    + "Erwartetes Positionsnetto: "
+                    + amount(
+                    expectedLineNet
+                )
+                    + ", gespeichertes Positionsnetto: "
+                    + amount(
+                    storedLineNet
+                )
+                    + "."
+            );
+        }
+
+        Element allowance =
+            appendElement(
+                document,
+                invoiceLine,
+                CAC_NAMESPACE,
+                "cac:AllowanceCharge"
+            );
+
+        appendTextElement(
+            document,
+            allowance,
+            CBC_NAMESPACE,
+            "cbc:ChargeIndicator",
+            "false"
+        );
+
+        appendTextElement(
+            document,
+            allowance,
+            CBC_NAMESPACE,
+            "cbc:AllowanceChargeReason",
+            "Positionsrabatt"
+        );
+
+        /*
+         * Prozentwert ausgeben:
+         *
+         * 10 bedeutet 10 Prozent.
+         * Nicht 0,1 ausgeben.
+         */
+        appendDecimalElement(
+            document,
+            allowance,
+            "cbc:MultiplierFactorNumeric",
+            discountPercent,
+            RATE_SCALE
+        );
+
+        appendAmountElement(
+            document,
+            allowance,
+            "cbc:Amount",
+            allowanceAmount,
+            currency(
+                invoice
+            )
+        );
+
+        appendAmountElement(
+            document,
+            allowance,
+            "cbc:BaseAmount",
+            baseAmount,
+            currency(
+                invoice
+            )
+        );
+    }
+
+    private void appendItem(
+        Document document,
+        Element invoiceLine,
+        XRechnungItemDto item
+    ) {
+        Element itemElement =
+            appendElement(
+                document,
+                invoiceLine,
+                CAC_NAMESPACE,
+                "cac:Item"
+            );
+
+        appendOptionalTextElement(
+            document,
+            itemElement,
+            CBC_NAMESPACE,
+            "cbc:Description",
+            item.getDescription()
+        );
+
+        String itemName =
+            firstNonBlank(
+                item.getProductName(),
+                item.getDescription(),
+                item.getProductNumber()
+            );
+
+        appendTextElement(
+            document,
+            itemElement,
+            CBC_NAMESPACE,
+            "cbc:Name",
+            itemName
+        );
+
+        if (notBlank(
+            item.getProductNumber()
+        )) {
+            Element sellerItemIdentification =
+                appendElement(
+                    document,
+                    itemElement,
+                    CAC_NAMESPACE,
+                    "cac:SellersItemIdentification"
+                );
+
+            appendTextElement(
+                document,
+                sellerItemIdentification,
+                CBC_NAMESPACE,
+                "cbc:ID",
+                item.getProductNumber()
+            );
+        }
+
+        Element taxCategory =
+            appendElement(
+                document,
+                itemElement,
+                CAC_NAMESPACE,
+                "cac:ClassifiedTaxCategory"
+            );
+
+        String categoryCode =
+            defaultValue(
+                item.getTaxCategoryCode(),
+                DEFAULT_TAX_CATEGORY
+            );
+
+        appendTextElement(
+            document,
+            taxCategory,
+            CBC_NAMESPACE,
+            "cbc:ID",
+            categoryCode
+        );
+
+        if (requiresVatRate(
+            categoryCode
+        )) {
+            appendDecimalElement(
+                document,
+                taxCategory,
+                "cbc:Percent",
+                normalizeRate(
+                    item.getVatRate()
+                ),
+                RATE_SCALE
+            );
+        }
+
+        Element taxScheme =
+            appendElement(
+                document,
+                taxCategory,
+                CAC_NAMESPACE,
+                "cac:TaxScheme"
+            );
+
+        appendTextElement(
+            document,
+            taxScheme,
+            CBC_NAMESPACE,
+            "cbc:ID",
+            "VAT"
+        );
+    }
+
+    private void appendPrice(
+        Document document,
+        Element invoiceLine,
+        XRechnungDto invoice,
+        XRechnungItemDto item
+    ) {
+        Element price =
+            appendElement(
+                document,
+                invoiceLine,
+                CAC_NAMESPACE,
+                "cac:Price"
+            );
+
+        appendAmountElement(
+            document,
+            price,
+            "cbc:PriceAmount",
+            price(
+                item.getUnitPriceNet()
+            ),
+            currency(
+                invoice
+            )
+        );
+
+        Element baseQuantity =
+            appendDecimalElement(
+                document,
+                price,
+                "cbc:BaseQuantity",
+                BigDecimal.ONE,
+                0
+            );
+
+//        baseQuantity.setAttribute(
+//            "unitCode",
+//            defaultValue(
+//                item.getUnit(),
+//                DEFAULT_UNIT_CODE
+//            )
+//        );
+        baseQuantity.setAttribute(
+            "unitCode",
+            normalizeUnitCode(
+                item.getUnit()
+            )
+        );
+    }
+
+    private byte[] transformToBytes(
+        Document document
+    ) throws Exception {
+
+        TransformerFactory transformerFactory =
+            TransformerFactory.newInstance();
+
+        transformerFactory.setFeature(
+            XMLConstants.FEATURE_SECURE_PROCESSING,
+            true
+        );
+
+        Transformer transformer =
+            transformerFactory.newTransformer();
+
+        transformer.setOutputProperty(
+            OutputKeys.ENCODING,
+            StandardCharsets.UTF_8.name()
+        );
+
+        transformer.setOutputProperty(
+            OutputKeys.INDENT,
+            "yes"
+        );
+
+        transformer.setOutputProperty(
+            OutputKeys.OMIT_XML_DECLARATION,
+            "no"
+        );
+
+        transformer.setOutputProperty(
+            "{http://xml.apache.org/xslt}indent-amount",
+            "2"
+        );
+
+        try (
+            ByteArrayOutputStream output =
+                new ByteArrayOutputStream()
+        ) {
+            transformer.transform(
+                new DOMSource(
+                    document
+                ),
+                new StreamResult(
+                    output
+                )
+            );
+
+            return output.toByteArray();
+        }
+    }
+
+    private Element appendElement(
+        Document document,
+        Element parent,
+        String namespace,
+        String qualifiedName
+    ) {
+        Element element =
+            document.createElementNS(
+                namespace,
+                qualifiedName
+            );
+
+        parent.appendChild(
+            element
+        );
+
+        return element;
+    }
+
+    private Element appendTextElement(
+        Document document,
+        Element parent,
+        String namespace,
+        String qualifiedName,
+        String value
+    ) {
+        String normalized =
+            normalize(
+                value
+            );
+
+        if (normalized == null) {
+            throw new IllegalStateException(
+                "Der Wert für "
+                    + qualifiedName
+                    + " fehlt."
+            );
+        }
+
+        Element element =
+            appendElement(
+                document,
+                parent,
+                namespace,
+                qualifiedName
+            );
+
+        element.setTextContent(
+            normalized
+        );
+
+        return element;
+    }
+
+    private void appendOptionalTextElement(
+        Document document,
+        Element parent,
+        String namespace,
+        String qualifiedName,
+        String value
+    ) {
+        String normalized =
+            normalize(
+                value
+            );
+
+        if (normalized == null) {
+            return;
+        }
+
+        Element element =
+            appendElement(
+                document,
+                parent,
+                namespace,
+                qualifiedName
+            );
+
+        element.setTextContent(
+            normalized
+        );
+    }
+
+    private Element appendDateElement(
+        Document document,
+        Element parent,
+        String qualifiedName,
+        LocalDate value
+    ) {
+        requireNotNull(
+            value,
+            qualifiedName
+        );
+
+        return appendTextElement(
+            document,
+            parent,
+            CBC_NAMESPACE,
+            qualifiedName,
+            value.toString()
+        );
+    }
+
+    private Element appendAmountElement(
+        Document document,
+        Element parent,
+        String qualifiedName,
+        BigDecimal value,
+        String currency
+    ) {
+        Element element =
+            appendTextElement(
+                document,
+                parent,
+                CBC_NAMESPACE,
+                qualifiedName,
+                amount(
+                    value
+                )
+            );
+
+        element.setAttribute(
+            "currencyID",
             currency
         );
 
-        amountElement(
-            writer,
-            "GrandTotalAmount",
-            totals.getTotalGross(),
-            null
-        );
-
-        amountElement(
-            writer,
-            "DuePayableAmount",
-            totals.getTotalGross(),
-            null
-        );
-
-        writer.writeEndElement();
-        writer.writeEndElement();
+        return element;
     }
 
-    private void writePaymentMeans(
-        XMLStreamWriter writer,
-        XRechnungDto invoice
-    ) throws XMLStreamException {
-
-        String paymentMeansCode =
-            defaultValue(
-                invoice.getPaymentMeansCode(),
-                DEFAULT_PAYMENT_MEANS_CODE
-            );
-
-        String normalizedIban =
-            normalizeIban(
-                invoice.getIban()
-            );
-
-        String normalizedBic =
-            normalizeBic(
-                invoice.getBic()
-            );
-
-        startRam(
-            writer,
-            "SpecifiedTradeSettlementPaymentMeans"
-        );
-
-        // BT-81 Zahlungsmittelcode
-        elementRam(
-            writer,
-            "TypeCode",
-            paymentMeansCode
-        );
-
-        // BG-17 und BT-84 Zahlungskonto beziehungsweise IBAN
-        if (notBlank(
-            normalizedIban
-        )) {
-            startRam(
-                writer,
-                "PayeePartyCreditorFinancialAccount"
-            );
-
-            elementRam(
-                writer,
-                "IBANID",
-                normalizedIban
-            );
-
-            // BT-85 Kontoinhaber
-            optionalElementRam(
-                writer,
-                "AccountName",
-                invoice.getAccountHolder()
-            );
-
-            writer.writeEndElement();
-        }
-
-        if (notBlank(
-            normalizedBic
-        )) {
-            startRam(
-                writer,
-                "PayeeSpecifiedCreditorFinancialInstitution"
-            );
-
-            elementRam(
-                writer,
-                "BICID",
-                normalizedBic
-            );
-
-            writer.writeEndElement();
-        }
-
-        writer.writeEndElement();
-    }
-
-    private String resolveTaxCategory(
-        List<XRechnungItemDto> items
+    private Element appendDecimalElement(
+        Document document,
+        Element parent,
+        String qualifiedName,
+        BigDecimal value,
+        int scale
     ) {
-        if (items == null
-            || items.isEmpty()) {
+        requireNotNull(
+            value,
+            qualifiedName
+        );
 
-            return DEFAULT_TAX_CATEGORY_CODE;
-        }
+        BigDecimal normalized =
+            value.setScale(
+                scale,
+                MONEY_ROUNDING
+            );
 
+        return appendTextElement(
+            document,
+            parent,
+            CBC_NAMESPACE,
+            qualifiedName,
+            decimal(
+                normalized
+            )
+        );
+    }
+
+    private BigDecimal money(
+        BigDecimal value
+    ) {
+        return zeroIfNull(
+            value
+        ).setScale(
+            MONEY_SCALE,
+            MONEY_ROUNDING
+        );
+    }
+
+    private BigDecimal price(
+        BigDecimal value
+    ) {
+        return zeroIfNull(
+            value
+        ).setScale(
+            PRICE_SCALE,
+            MONEY_ROUNDING
+        );
+    }
+
+    private BigDecimal normalizeRate(
+        BigDecimal value
+    ) {
+        return zeroIfNull(
+            value
+        ).setScale(
+            RATE_SCALE,
+            MONEY_ROUNDING
+        );
+    }
+
+    private String amount(
+        BigDecimal value
+    ) {
+        return money(
+            value
+        ).toPlainString();
+    }
+
+    private String decimal(
+        BigDecimal value
+    ) {
+        return value
+            .stripTrailingZeros()
+            .toPlainString();
+    }
+
+    private String currency(
+        XRechnungDto invoice
+    ) {
         return defaultValue(
-            items.get(0)
-                .getTaxCategoryCode(),
-            DEFAULT_TAX_CATEGORY_CODE
+            invoice.getCurrencyCode(),
+            DEFAULT_CURRENCY
+        ).toUpperCase(
+            Locale.ROOT
         );
     }
 
-    private BigDecimal resolveTaxRate(
-        List<XRechnungItemDto> items
+    private String normalizeIban(
+        String value
     ) {
-        if (items == null
-            || items.isEmpty()
-            || items.get(0).getVatRate() == null) {
+        String normalized =
+            normalize(
+                value
+            );
 
-            return BigDecimal.ZERO;
-        }
-
-        return items.get(0)
-            .getVatRate();
-    }
-
-    private void validate(
-        XRechnungDto invoice
-    ) {
-        if (invoice == null) {
-            throw new IllegalArgumentException(
-                "Die XRechnung darf nicht null sein."
+        if (normalized == null) {
+            throw new IllegalStateException(
+                "Die IBAN fehlt für die XRechnung."
             );
         }
+
+        return normalized.replaceAll(
+            "\\s+",
+            ""
+        );
+    }
+
+    private String firstNonBlank(
+        String... values
+    ) {
+        if (values == null) {
+            return "Rechnungsposition";
+        }
+
+        for (String value : values) {
+            String normalized =
+                normalize(
+                    value
+                );
+
+            if (normalized != null) {
+                int lineBreak =
+                    normalized.indexOf(
+                        '\n'
+                    );
+
+                return lineBreak < 0
+                    ? normalized
+                    : normalized
+                    .substring(
+                        0,
+                        lineBreak
+                    )
+                    .trim();
+            }
+        }
+
+        return "Rechnungsposition";
+    }
+
+    private String defaultValue(
+        String value,
+        String defaultValue
+    ) {
+        String normalized =
+            normalize(
+                value
+            );
+
+        return normalized == null
+            ? defaultValue
+            : normalized;
+    }
+
+    private String normalize(
+        String value
+    ) {
+        if (value == null) {
+            return null;
+        }
+
+        String normalized =
+            value
+                .replace(
+                    "\r\n",
+                    "\n"
+                )
+                .replace(
+                    '\r',
+                    '\n'
+                )
+                .trim();
+
+        return normalized.isEmpty()
+            ? null
+            : normalized;
+    }
+
+    private boolean notBlank(
+        String value
+    ) {
+        return normalize(
+            value
+        ) != null;
+    }
+
+    private String safe(
+        String value
+    ) {
+        String normalized =
+            normalize(
+                value
+            );
+
+        return normalized == null
+            ? ""
+            : normalized;
+    }
+
+    private BigDecimal zeroIfNull(
+        BigDecimal value
+    ) {
+        return value == null
+            ? BigDecimal.ZERO
+            : value;
+    }
+
+    private void requireNotNull(
+        Object value,
+        String fieldName
+    ) {
+        if (value == null) {
+            throw new IllegalStateException(
+                fieldName
+                    + " darf nicht null sein."
+            );
+        }
+    }
+
+    private void validateInvoice(
+        XRechnungDto invoice
+    ) {
+        requireNotNull(
+            invoice,
+            "XRechnung"
+        );
 
         requireText(
             invoice.getInvoiceNumber(),
@@ -1107,7 +2171,7 @@ public class InvoiceXmlGenerator {
 
         requireText(
             invoice.getBuyerReference(),
-            "Buyer Reference"
+            "Käuferreferenz"
         );
 
         requireNotNull(
@@ -1122,453 +2186,116 @@ public class InvoiceXmlGenerator {
 
         requireNotNull(
             invoice.getTotals(),
-            "Summen"
+            "Rechnungssummen"
         );
 
         if (invoice.getItems() == null
             || invoice.getItems().isEmpty()) {
 
-            throw new IllegalArgumentException(
+            throw new IllegalStateException(
                 "Die XRechnung muss mindestens "
                     + "eine Position enthalten."
             );
         }
 
-        validatePaymentInformation(
-            invoice
-        );
-    }
-
-    private void validatePaymentInformation(
-        XRechnungDto invoice
-    ) {
-        String paymentMeansCode =
-            defaultValue(
-                invoice.getPaymentMeansCode(),
-                DEFAULT_PAYMENT_MEANS_CODE
-            );
-
-        // Bei SEPA-Überweisung ist die IBAN erforderlich.
-        if (DEFAULT_PAYMENT_MEANS_CODE.equals(
-            paymentMeansCode
-        )) {
-            requireText(
-                invoice.getIban(),
-                "IBAN bei SEPA-Überweisung"
-            );
-        }
-
-        if (notBlank(
-            invoice.getIban()
-        )) {
-            validateIban(
-                invoice.getIban()
-            );
-        }
-
-        if (notBlank(
-            invoice.getBic()
-        )) {
-            validateBic(
-                invoice.getBic()
-            );
-        }
-    }
-
-    private void validateIban(
-        String iban
-    ) {
-        String normalizedIban =
-            normalizeIban(
-                iban
-            );
-
-        if (normalizedIban == null) {
-            throw new IllegalArgumentException(
-                "Die IBAN fehlt."
-            );
-        }
-
-        if (!normalizedIban.matches(
-            "[A-Z]{2}[0-9]{2}[A-Z0-9]+"
-        )) {
-            throw new IllegalArgumentException(
-                "Die IBAN besitzt ein ungültiges Format."
-            );
-        }
-
-        if (normalizedIban.length() < 15
-            || normalizedIban.length() > 34) {
-
-            throw new IllegalArgumentException(
-                "Die IBAN muss zwischen 15 und 34 "
-                    + "Zeichen enthalten."
-            );
-        }
-
-        // Eine deutsche IBAN besitzt genau 22 Zeichen.
-        if (normalizedIban.startsWith(
-            "DE"
-        )
-            && normalizedIban.length() != 22) {
-
-            throw new IllegalArgumentException(
-                "Eine deutsche IBAN muss genau "
-                    + "22 Zeichen enthalten. Aktuelle Länge: "
-                    + normalizedIban.length()
-                    + "."
-            );
-        }
-
-        String rearranged =
-            normalizedIban.substring(4)
-                + normalizedIban.substring(
-                0,
-                4
-            );
-
-        int remainder =
-            calculateIbanRemainder(
-                rearranged
-            );
-
-        // Eine gültige IBAN muss bei der Modulo-97-Prüfung Rest 1 ergeben.
-        if (remainder != 1) {
-            throw new IllegalArgumentException(
-                "Die IBAN besitzt eine ungültige Prüfsumme."
-            );
-        }
-    }
-
-    private int calculateIbanRemainder(
-        String value
-    ) {
-        int remainder =
-            0;
-
         for (
-            int index = 0;
-            index < value.length();
-            index++
+            XRechnungItemDto item :
+            invoice.getItems()
         ) {
-            char character =
-                value.charAt(
-                    index
-                );
-
-            if (Character.isDigit(
-                character
-            )) {
-                remainder =
-                    appendDigitToRemainder(
-                        remainder,
-                        character - '0'
-                    );
-
-            } else if (character >= 'A'
-                && character <= 'Z') {
-
-                int numericValue =
-                    character - 'A' + 10;
-
-                remainder =
-                    appendDigitToRemainder(
-                        remainder,
-                        numericValue / 10
-                    );
-
-                remainder =
-                    appendDigitToRemainder(
-                        remainder,
-                        numericValue % 10
-                    );
-
-            } else {
-                throw new IllegalArgumentException(
-                    "Die IBAN enthält ein ungültiges Zeichen: "
-                        + character
-                );
-            }
-        }
-
-        return remainder;
-    }
-
-    private int appendDigitToRemainder(
-        int remainder,
-        int digit
-    ) {
-        return (
-            remainder * 10
-                + digit
-        ) % 97;
-    }
-
-    private void validateBic(
-        String bic
-    ) {
-        String normalizedBic =
-            normalizeBic(
-                bic
-            );
-
-        if (normalizedBic == null) {
-            return;
-        }
-
-        if (!normalizedBic.matches(
-            "[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?"
-        )) {
-            throw new IllegalArgumentException(
-                "Der BIC besitzt ein ungültiges Format. "
-                    + "Erwartet werden 8 oder 11 Zeichen."
+            validateItem(
+                item
             );
         }
     }
 
-    private String normalizeIban(
-        String iban
+    private void validateItem(
+        XRechnungItemDto item
     ) {
-        if (!notBlank(
-            iban
-        )) {
-            return null;
-        }
-
-        return iban
-            .replaceAll(
-                "[\\s\\u00A0]+",
-                ""
-            )
-            .toUpperCase(
-                Locale.ROOT
-            );
-    }
-
-    private String normalizeBic(
-        String bic
-    ) {
-        if (!notBlank(
-            bic
-        )) {
-            return null;
-        }
-
-        return bic
-            .replaceAll(
-                "[\\s\\u00A0]+",
-                ""
-            )
-            .toUpperCase(
-                Locale.ROOT
-            );
-    }
-
-    private void startRsm(
-        XMLStreamWriter writer,
-        String localName
-    ) throws XMLStreamException {
-
-        writer.writeStartElement(
-            "rsm",
-            localName,
-            RSM
-        );
-    }
-
-    private void startRam(
-        XMLStreamWriter writer,
-        String localName
-    ) throws XMLStreamException {
-
-        writer.writeStartElement(
-            "ram",
-            localName,
-            RAM
-        );
-    }
-
-    private void elementRam(
-        XMLStreamWriter writer,
-        String localName,
-        String value
-    ) throws XMLStreamException {
-
-        writer.writeStartElement(
-            "ram",
-            localName,
-            RAM
+        requireNotNull(
+            item,
+            "Rechnungsposition"
         );
 
-        writer.writeCharacters(
-            value == null
-                ? ""
-                : value
+        requireNotNull(
+            item.getPositionNumber(),
+            "Positionsnummer"
         );
 
-        writer.writeEndElement();
-    }
-
-    private void optionalElementRam(
-        XMLStreamWriter writer,
-        String localName,
-        String value
-    ) throws XMLStreamException {
-
-        if (notBlank(
-            value
-        )) {
-            elementRam(
-                writer,
-                localName,
-                value
-            );
-        }
-    }
-
-    private void dateElement(
-        XMLStreamWriter writer,
-        String localName,
-        LocalDate value
-    ) throws XMLStreamException {
-
-        writer.writeStartElement(
-            "udt",
-            localName,
-            UDT
+        requireText(
+            item.getDescription(),
+            "Positionsbeschreibung"
         );
 
-        writer.writeAttribute(
-            "format",
-            "102"
+        requireNotNull(
+            item.getQuantity(),
+            "Positionsmenge"
         );
 
-        writer.writeCharacters(
-            value.format(
-                DATE_FORMAT
-            )
+        requireNotNull(
+            item.getUnitPriceNet(),
+            "Netto-Einzelpreis"
         );
 
-        writer.writeEndElement();
-    }
-
-    private void amountElement(
-        XMLStreamWriter writer,
-        String localName,
-        BigDecimal value,
-        String currency
-    ) throws XMLStreamException {
-
-        writer.writeStartElement(
-            "ram",
-            localName,
-            RAM
+        requireNotNull(
+            item.getVatRate(),
+            "Umsatzsteuersatz"
         );
 
-        if (notBlank(
-            currency
-        )) {
-            writer.writeAttribute(
-                "currencyID",
-                currency
+        requireNotNull(
+            item.getLineNet(),
+            "Positionsnettosumme"
+        );
+
+        if (item.getQuantity().compareTo(
+            BigDecimal.ZERO
+        ) <= 0) {
+            throw new IllegalStateException(
+                "Die Menge der Position "
+                    + item.getPositionNumber()
+                    + " muss größer als 0 sein."
             );
         }
 
-        writer.writeCharacters(
-            decimal(
-                value,
-                2
-            )
-        );
-
-        writer.writeEndElement();
-    }
-
-    private void quantityElement(
-        XMLStreamWriter writer,
-        String localName,
-        BigDecimal value,
-        String unitCode
-    ) throws XMLStreamException {
-
-        writer.writeStartElement(
-            "ram",
-            localName,
-            RAM
-        );
-
-        writer.writeAttribute(
-            "unitCode",
-            unitCode
-        );
-
-        writer.writeCharacters(
-            decimal(
-                value,
-                4
-            )
-        );
-
-        writer.writeEndElement();
-    }
-
-    private String normalizeUnitCode(
-        String value
-    ) {
-        if (!notBlank(
-            value
-        )) {
-            return "C62";
+        if (item.getUnitPriceNet().compareTo(
+            BigDecimal.ZERO
+        ) < 0) {
+            throw new IllegalStateException(
+                "Der Netto-Einzelpreis der Position "
+                    + item.getPositionNumber()
+                    + " darf nicht negativ sein."
+            );
         }
 
-        String normalized =
-            value.trim()
-                .toUpperCase(
-                    Locale.ROOT
-                );
-
-        if ("STD".equals(
-            normalized
-        )) {
-            return "HUR";
+        if (item.getVatRate().compareTo(
+            BigDecimal.ZERO
+        ) < 0) {
+            throw new IllegalStateException(
+                "Der Umsatzsteuersatz der Position "
+                    + item.getPositionNumber()
+                    + " darf nicht negativ sein."
+            );
         }
 
-        return normalized;
-    }
+        BigDecimal discountPercent =
+            zeroIfNull(
+                item.getDiscountPercent()
+            );
 
-    private String decimal(
-        BigDecimal value,
-        int scale
-    ) {
-        BigDecimal safeValue =
-            value == null
-                ? BigDecimal.ZERO
-                : value;
-
-        return safeValue
-            .setScale(
-                scale,
-                RoundingMode.HALF_UP
+        if (discountPercent.compareTo(
+            BigDecimal.ZERO
+        ) < 0
+            || discountPercent.compareTo(
+            BigDecimal.valueOf(
+                100
             )
-            .toPlainString();
-    }
+        ) > 0) {
 
-    private String defaultValue(
-        String value,
-        String fallback
-    ) {
-        return notBlank(
-            value
-        )
-            ? value.trim()
-            : fallback;
-    }
-
-    private boolean notBlank(
-        String value
-    ) {
-        return value != null
-            && !value.trim().isEmpty();
+            throw new IllegalStateException(
+                "Der Rabatt der Position "
+                    + item.getPositionNumber()
+                    + " muss zwischen 0 und 100 Prozent liegen."
+            );
+        }
     }
 
     private void requireText(
@@ -1578,147 +2305,63 @@ public class InvoiceXmlGenerator {
         if (!notBlank(
             value
         )) {
-            throw new IllegalArgumentException(
-                fieldName
-                    + " fehlt für die XRechnung."
-            );
-        }
-    }
-
-    private void requireNotNull(
-        Object value,
-        String fieldName
-    ) {
-        if (value == null) {
-            throw new IllegalArgumentException(
-                fieldName
-                    + " fehlt für die XRechnung."
-            );
-        }
-    }
-
-    private byte[] prettyPrint(
-        byte[] xml
-    ) {
-        if (xml == null
-            || xml.length == 0) {
-
-            throw new IllegalArgumentException(
-                "Die zu formatierende XML darf nicht leer sein."
-            );
-        }
-
-        try (
-            ByteArrayInputStream input =
-                new ByteArrayInputStream(
-                    xml
-                );
-
-            ByteArrayOutputStream output =
-                new ByteArrayOutputStream()
-        ) {
-            TransformerFactory factory =
-                TransformerFactory.newInstance();
-
-            factory.setFeature(
-                XMLConstants.FEATURE_SECURE_PROCESSING,
-                true
-            );
-
-            setTransformerFactoryAttribute(
-                factory,
-                XMLConstants.ACCESS_EXTERNAL_DTD,
-                ""
-            );
-
-            setTransformerFactoryAttribute(
-                factory,
-                XMLConstants.ACCESS_EXTERNAL_STYLESHEET,
-                ""
-            );
-
-            Transformer transformer =
-                factory.newTransformer();
-
-            transformer.setOutputProperty(
-                OutputKeys.METHOD,
-                "xml"
-            );
-
-            transformer.setOutputProperty(
-                OutputKeys.ENCODING,
-                StandardCharsets.UTF_8.name()
-            );
-
-            transformer.setOutputProperty(
-                OutputKeys.INDENT,
-                "yes"
-            );
-
-            transformer.setOutputProperty(
-                OutputKeys.OMIT_XML_DECLARATION,
-                "no"
-            );
-
-            transformer.setOutputProperty(
-                OutputKeys.STANDALONE,
-                "no"
-            );
-
-            setTransformerOutputProperty(
-                transformer,
-                "{http://xml.apache.org/xslt}indent-amount",
-                "4"
-            );
-
-            transformer.transform(
-                new StreamSource(
-                    input
-                ),
-                new StreamResult(
-                    output
-                )
-            );
-
-            return output.toByteArray();
-
-        } catch (Exception exception) {
             throw new IllegalStateException(
-                "Die XRechnung-XML konnte nicht formatiert werden.",
-                exception
+                fieldName
+                    + " fehlt für die XRechnung."
             );
         }
     }
-
-    private void setTransformerFactoryAttribute(
-        TransformerFactory factory,
-        String name,
-        String value
+    private String normalizeUnitCode(
+        String unit
     ) {
-        try {
-            factory.setAttribute(
-                name,
-                value
+        String normalized =
+            normalize(
+                unit
             );
 
-        } catch (IllegalArgumentException ignored) {
-            // Nicht jede Transformer-Implementierung unterstützt das Attribut.
+        if (normalized == null) {
+            return DEFAULT_UNIT_CODE;
         }
+
+        return switch (
+            normalized.toUpperCase(
+                Locale.ROOT
+            )
+            ) {
+            case "STD",
+                 "STUNDE",
+                 "STUNDEN",
+                 "HOUR",
+                 "HOURS" -> "HUR";
+
+            case "STK",
+                 "STÜCK",
+                 "STUECK",
+                 "PIECE",
+                 "PIECES" -> "C62";
+
+            case "TAG",
+                 "TAGE",
+                 "DAY",
+                 "DAYS" -> "DAY";
+
+            default ->
+                normalized.toUpperCase(
+                    Locale.ROOT
+                );
+        };
     }
 
-    private void setTransformerOutputProperty(
-        Transformer transformer,
-        String name,
-        String value
+    private record TaxKey(
+        String categoryCode,
+        BigDecimal vatRate
     ) {
-        try {
-            transformer.setOutputProperty(
-                name,
-                value
-            );
+    }
 
-        } catch (IllegalArgumentException ignored) {
-            // indent-amount ist eine optionale Erweiterung.
-        }
+    private record TaxBreakdown(
+        TaxKey key,
+        BigDecimal taxableAmount,
+        BigDecimal taxAmount
+    ) {
     }
 }

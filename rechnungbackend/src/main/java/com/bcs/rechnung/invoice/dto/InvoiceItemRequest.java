@@ -1,68 +1,102 @@
 package com.bcs.rechnung.invoice.dto;
 
-import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 
-@Schema(
-    name = "InvoiceItemRequest",
-    description = "Anlage einer Rechnungsposition"
-)
 public record InvoiceItemRequest(
 
-    @NotNull
-    @Schema(
-        description = "ID des Produkts",
-        example = "1",
-        requiredMode = Schema.RequiredMode.REQUIRED
+    @NotNull(
+        message = "Das Produkt muss angegeben werden."
+    )
+    @Positive(
+        message = "Die Produkt-ID muss größer als 0 sein."
     )
     Long productId,
 
-    @Size(max = 1000)
-    @Schema(
-        description = "Individuelle Positionsbeschreibung",
-        example = "Softwareentwicklung",
-        nullable = true
+    @Size(
+        max = 4000,
+        message = "Die Positionsbeschreibung darf maximal 4000 Zeichen enthalten."
     )
     String description,
 
-    @NotNull
-    @DecimalMin(value = "0.0001")
-    @Schema(
-        description = "Menge",
-        example = "2.0000",
-        requiredMode = Schema.RequiredMode.REQUIRED
+    @NotNull(
+        message = "Die Menge muss angegeben werden."
+    )
+    @DecimalMin(
+        value = "0.0001",
+        inclusive = true,
+        message = "Die Menge muss größer als 0 sein."
+    )
+    @Digits(
+        integer = 15,
+        fraction = 4,
+        message = "Die Menge darf maximal 15 Ganzzahl- und 4 Nachkommastellen enthalten."
     )
     BigDecimal quantity,
 
-    @DecimalMin(value = "0.0000")
-    @Schema(
-        description = "Abweichender Nettopreis",
-        example = "120.0000",
-        nullable = true
+    @Size(
+        max = 10,
+        message = "Die Mengeneinheit darf maximal 10 Zeichen enthalten."
+    )
+    String unit,
+
+    @NotNull(
+        message = "Der Netto-Einzelpreis muss angegeben werden."
+    )
+    @DecimalMin(
+        value = "0.00",
+        inclusive = true,
+        message = "Der Netto-Einzelpreis darf nicht negativ sein."
+    )
+    @Digits(
+        integer = 15,
+        fraction = 4,
+        message = "Der Netto-Einzelpreis darf maximal 15 Ganzzahl- und 4 Nachkommastellen enthalten."
     )
     BigDecimal unitPriceNet,
 
-    @DecimalMin(value = "0.0000")
-    @DecimalMax(value = "100.0000")
-    @Schema(
-        description = "Positionsrabatt in Prozent",
-        example = "0.0000"
+    @NotNull(
+        message = "Der Mehrwertsteuersatz muss angegeben werden."
     )
-    BigDecimal discountPercent,
+    @DecimalMin(
+        value = "0.00",
+        inclusive = true,
+        message = "Der Mehrwertsteuersatz darf nicht negativ sein."
+    )
+    @DecimalMax(
+        value = "100.00",
+        inclusive = true,
+        message = "Der Mehrwertsteuersatz darf maximal 100 % betragen."
+    )
+    @Digits(
+        integer = 3,
+        fraction = 2,
+        message = "Der Mehrwertsteuersatz darf maximal 2 Nachkommastellen enthalten."
+    )
+    BigDecimal vatRate,
 
-    @NotNull
-    @DecimalMin(value = "0.0000")
-    @DecimalMax(value = "100.0000")
-    @Schema(
-        description = "Umsatzsteuersatz",
-        example = "19.0000",
-        requiredMode = Schema.RequiredMode.REQUIRED
+    @DecimalMin(
+        value = "0.00",
+        inclusive = true,
+        message = "Der Positionsrabatt darf nicht negativ sein."
     )
-    BigDecimal vatRate
+    @DecimalMax(
+        value = "100.00",
+        inclusive = true,
+        message = "Der Positionsrabatt darf maximal 100 % betragen."
+    )
+    @Digits(
+        integer = 3,
+        fraction = 2,
+        message = "Der Positionsrabatt darf maximal 2 Nachkommastellen enthalten."
+    )
+    BigDecimal discountPercent
+
 ) {
 }

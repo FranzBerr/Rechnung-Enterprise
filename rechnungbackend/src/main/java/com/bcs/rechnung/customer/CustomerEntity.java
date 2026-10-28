@@ -48,7 +48,6 @@ public class CustomerEntity {
 
     /**
      * Firma, der dieser Kunde zugeordnet ist.
-     *
      * Die Fremdschlüsselspalte in der Tabelle customer
      * lautet company_id.
      */

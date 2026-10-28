@@ -22,6 +22,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -33,6 +34,11 @@ import java.util.List;
 @Entity
 @Table(name = "invoice")
 public class InvoiceEntity {
+
+    private static final int MONEY_SCALE = 2;
+
+    private static final RoundingMode MONEY_ROUNDING =
+        RoundingMode.HALF_UP;
 
     @Id
     @GeneratedValue(
@@ -209,7 +215,10 @@ public class InvoiceEntity {
     private Integer discountDays = 0;
 
     // ---------------------------------------------------------
-    // Summen
+    // Rechnungssummen
+    //
+    // Diese Werte werden ausschließlich aus den bereits
+    // berechneten InvoiceItemEntity-Positionen aggregiert.
     // ---------------------------------------------------------
 
     @Column(
@@ -317,7 +326,7 @@ public class InvoiceEntity {
 
     /**
      * S = Standard VAT
-     * Z = Steuerfrei
+     * Z = Zero rated
      * E = Exempt
      */
     @Column(
@@ -365,10 +374,12 @@ public class InvoiceEntity {
 
     @Column(
         name = "specification_identifier",
+        nullable = false,
         length = 300
     )
     private String specificationIdentifier =
-        "urn:xeinkauf.de:kosit:xrechnung_3.0";
+        "urn:cen.eu:en16931:2017#compliant#"
+            + "urn:xeinkauf.de:kosit:xrechnung_3.0";
 
     // ---------------------------------------------------------
     // Sonstiges
@@ -388,7 +399,8 @@ public class InvoiceEntity {
         name = "archived",
         nullable = false
     )
-    private Boolean archived = false;
+    private Boolean archived =
+        false;
 
     @Column(
         name = "archived_at"
@@ -418,7 +430,7 @@ public class InvoiceEntity {
         new ArrayList<>();
 
     // ---------------------------------------------------------
-    // Helper
+    // Positionsverwaltung
     // ---------------------------------------------------------
 
     public void addItem(
@@ -428,8 +440,13 @@ public class InvoiceEntity {
             return;
         }
 
-        item.setInvoice(this);
-        items.add(item);
+        item.setInvoice(
+            this
+        );
+
+        items.add(
+            item
+        );
     }
 
     public void removeItem(
@@ -439,29 +456,215 @@ public class InvoiceEntity {
             return;
         }
 
-        items.remove(item);
-        item.setInvoice(null);
+        if (
+            items.remove(
+                item
+            )
+        ) {
+            item.setInvoice(
+                null
+            );
+        }
     }
 
     public void replaceItems(
         List<InvoiceItemEntity> newItems
     ) {
         for (
-            InvoiceItemEntity existingItem : items
+            InvoiceItemEntity existingItem :
+            items
         ) {
-            existingItem.setInvoice(null);
+            existingItem.setInvoice(
+                null
+            );
         }
 
         items.clear();
 
-        if (newItems == null) {
-            return;
+        if (newItems != null) {
+            for (
+                InvoiceItemEntity item :
+                newItems
+            ) {
+                addItem(
+                    item
+                );
+            }
         }
 
-        for (
-            InvoiceItemEntity item : newItems
-        ) {
-            addItem(item);
+        recalculateTotals();
+    }
+
+    // ---------------------------------------------------------
+    // Zentrale Summenberechnung
+    // ---------------------------------------------------------
+
+    /**
+     * Berechnet sämtliche Rechnungssummen ausschließlich
+     * aus den bereits berechneten Rechnungspositionen.
+     *
+     * Erwartet wird, dass für jede InvoiceItemEntity bereits
+     * mindestens folgende Werte korrekt gesetzt sind:
+     *
+     * lineNet
+     * taxAmount
+     *
+     * Die Positionsberechnung findet bewusst nicht hier statt.
+     */
+    public void recalculateTotals() {
+
+        BigDecimal calculatedSubtotalNet =
+            BigDecimal.ZERO;
+
+        BigDecimal calculatedTaxAmount =
+            BigDecimal.ZERO;
+
+        if (items != null) {
+
+            for (
+                InvoiceItemEntity item :
+                items
+            ) {
+                if (item == null) {
+                    continue;
+                }
+
+                calculatedSubtotalNet =
+                    calculatedSubtotalNet.add(
+                        zeroIfNull(
+                            item.getLineNet()
+                        )
+                    );
+
+                calculatedTaxAmount =
+                    calculatedTaxAmount.add(
+                        zeroIfNull(
+                            item.getTaxAmount()
+                        )
+                    );
+            }
         }
+
+        subtotalNet =
+            money(
+                calculatedSubtotalNet
+            );
+
+        taxAmount =
+            money(
+                calculatedTaxAmount
+            );
+
+        /*
+         * Die Bruttosumme wird bewusst aus der finalen
+         * Nettosumme und der finalen Umsatzsteuer gebildet.
+         *
+         * Dadurch ist immer garantiert:
+         *
+         * subtotalNet + taxAmount = totalGross
+         */
+        totalGross =
+            money(
+                subtotalNet.add(
+                    taxAmount
+                )
+            );
+    }
+
+    /**
+     * Prüft, ob die aktuell gespeicherten Rechnungssummen
+     * mit den Positionswerten übereinstimmen.
+     *
+     * Die Methode verändert die Rechnung nicht.
+     */
+    public boolean hasConsistentTotals() {
+
+        BigDecimal calculatedSubtotalNet =
+            BigDecimal.ZERO;
+
+        BigDecimal calculatedTaxAmount =
+            BigDecimal.ZERO;
+
+        if (items != null) {
+
+            for (
+                InvoiceItemEntity item :
+                items
+            ) {
+                if (item == null) {
+                    continue;
+                }
+
+                calculatedSubtotalNet =
+                    calculatedSubtotalNet.add(
+                        zeroIfNull(
+                            item.getLineNet()
+                        )
+                    );
+
+                calculatedTaxAmount =
+                    calculatedTaxAmount.add(
+                        zeroIfNull(
+                            item.getTaxAmount()
+                        )
+                    );
+            }
+        }
+
+        calculatedSubtotalNet =
+            money(
+                calculatedSubtotalNet
+            );
+
+        calculatedTaxAmount =
+            money(
+                calculatedTaxAmount
+            );
+
+        BigDecimal calculatedTotalGross =
+            money(
+                calculatedSubtotalNet.add(
+                    calculatedTaxAmount
+                )
+            );
+
+        return money(
+            subtotalNet
+        ).compareTo(
+            calculatedSubtotalNet
+        ) == 0
+            && money(
+            taxAmount
+        ).compareTo(
+            calculatedTaxAmount
+        ) == 0
+            && money(
+            totalGross
+        ).compareTo(
+            calculatedTotalGross
+        ) == 0;
+    }
+
+    // ---------------------------------------------------------
+    // Geldbeträge
+    // ---------------------------------------------------------
+
+    private BigDecimal money(
+        BigDecimal value
+    ) {
+        return zeroIfNull(
+            value
+        ).setScale(
+            MONEY_SCALE,
+            MONEY_ROUNDING
+        );
+    }
+
+    private BigDecimal zeroIfNull(
+        BigDecimal value
+    ) {
+        return value == null
+            ? BigDecimal.ZERO
+            : value;
     }
 }

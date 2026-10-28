@@ -64,32 +64,73 @@ public class InvoiceDocumentServiceImpl
     public ArchivedInvoiceDocuments generateValidateAndArchive(
         Long invoiceId
     ) {
-        validateInvoiceId(invoiceId);
+        validateInvoiceId(
+            invoiceId
+        );
 
         InvoiceEntity invoice =
-            findInvoice(invoiceId);
+            findInvoice(
+                invoiceId
+            );
 
-        validateNotArchived(invoice);
+        validateNotArchived(
+            invoice
+        );
 
+        String entityInvoiceNumber =
+            normalizeInvoiceNumber(
+                invoice.getInvoiceNumber()
+            );
+
+        /*
+         * XRechnung erzeugen.
+         */
         GeneratedXRechnung generatedXml =
             invoiceXmlService.generateXml(
                 invoiceId
             );
 
+        validateGeneratedXml(
+            generatedXml
+        );
+
+        /*
+         * PDF erzeugen.
+         */
         GeneratedInvoicePdf generatedPdf =
             invoicePdfService.generateInvoicePdf(
                 invoiceId
             );
 
+        validateGeneratedPdf(
+            generatedPdf
+        );
+
+        /*
+         * XML und PDF müssen dieselbe
+         * Rechnungsnummer besitzen.
+         */
         verifyInvoiceNumbers(
             generatedXml.invoiceNumber(),
             generatedPdf.invoiceNumber()
         );
 
+        /*
+         * XML und PDF müssen zusätzlich zur
+         * geladenen Rechnung gehören.
+         */
+        verifyInvoiceNumbers(
+            entityInvoiceNumber,
+            generatedXml.invoiceNumber()
+        );
+
+        verifyInvoiceNumbers(
+            entityInvoiceNumber,
+            generatedPdf.invoiceNumber()
+        );
+
         String invoiceNumber =
-            normalizeInvoiceNumber(
-                generatedXml.invoiceNumber()
-            );
+            entityInvoiceNumber;
 
         String xmlFileName =
             FilenameUtils.xmlFileName(
@@ -101,6 +142,10 @@ public class InvoiceDocumentServiceImpl
                 invoiceNumber
             );
 
+        /*
+         * Das Arbeitsverzeichnis wird erst angelegt,
+         * nachdem XML und PDF erfolgreich erzeugt wurden.
+         */
         Path workingDirectory =
             createWorkingDirectory(
                 invoiceNumber
@@ -120,18 +165,57 @@ public class InvoiceDocumentServiceImpl
                     pdfFileName
                 );
 
+            /*
+             * Sicherstellen, dass die temporären
+             * Dateien innerhalb des Arbeitsordners liegen.
+             */
+            validateWorkingFilePath(
+                workingDirectory,
+                temporaryXml,
+                "XRechnung"
+            );
+
+            validateWorkingFilePath(
+                workingDirectory,
+                temporaryPdf,
+                "PDF-Rechnung"
+            );
+
+            /*
+             * XML schreiben.
+             */
             writeTemporaryFile(
                 temporaryXml,
                 generatedXml.content(),
                 "XRechnung"
             );
 
+            /*
+             * PDF schreiben.
+             */
             writeTemporaryFile(
                 temporaryPdf,
                 generatedPdf.content(),
                 "PDF-Rechnung"
             );
 
+            /*
+             * Dateien nach dem Schreiben nochmals prüfen.
+             */
+            validateTemporaryFile(
+                temporaryXml,
+                "XRechnung"
+            );
+
+            validateTemporaryFile(
+                temporaryPdf,
+                "PDF-Rechnung"
+            );
+
+            /*
+             * KoSIT validieren und bei erfolgreicher
+             * Prüfung archivieren.
+             */
             return validateAndArchive(
                 invoice,
                 invoiceNumber,
@@ -140,24 +224,53 @@ public class InvoiceDocumentServiceImpl
                 workingDirectory
             );
 
-        } catch (InvalidXRechnungException exception) {
-            preserveWorkingDirectory = true;
+        } catch (
+            InvalidXRechnungException exception
+        ) {
+            /*
+             * Arbeitsverzeichnis bei
+             * KoSIT-Fehler erhalten.
+             */
+            preserveWorkingDirectory =
+                true;
+
             throw exception;
 
-        } catch (IOException exception) {
-            preserveWorkingDirectory = true;
+        } catch (
+            IOException exception
+        ) {
+            /*
+             * Auch bei Datei-/IO-Problemen bleibt
+             * das Arbeitsverzeichnis bestehen.
+             */
+            preserveWorkingDirectory =
+                true;
 
             throw new IllegalStateException(
-                "Die Rechnungsdokumente konnten nicht "
-                    + "temporär gespeichert werden.",
+                "Die Dokumente der Rechnung "
+                    + invoiceNumber
+                    + " konnten nicht temporär gespeichert "
+                    + "oder verarbeitet werden.",
                 exception
             );
 
-        } catch (RuntimeException exception) {
-            preserveWorkingDirectory = true;
+        } catch (
+            RuntimeException exception
+        ) {
+            /*
+             * Arbeitsverzeichnis auch bei anderen
+             * Laufzeitfehlern zur Diagnose erhalten.
+             */
+            preserveWorkingDirectory =
+                true;
+
             throw exception;
 
         } finally {
+            /*
+             * Nur nach erfolgreicher Verarbeitung
+             * wird das Arbeitsverzeichnis entfernt.
+             */
             if (!preserveWorkingDirectory) {
                 deleteRecursively(
                     workingDirectory
@@ -171,12 +284,18 @@ public class InvoiceDocumentServiceImpl
     public ArchivedInvoiceDocuments archiveExistingDocuments(
         Long invoiceId
     ) {
-        validateInvoiceId(invoiceId);
+        validateInvoiceId(
+            invoiceId
+        );
 
         InvoiceEntity invoice =
-            findInvoice(invoiceId);
+            findInvoice(
+                invoiceId
+            );
 
-        validateNotArchived(invoice);
+        validateNotArchived(
+            invoice
+        );
 
         String invoiceNumber =
             normalizeInvoiceNumber(
@@ -226,6 +345,18 @@ public class InvoiceDocumentServiceImpl
                     pdfFileName
                 );
 
+            validateWorkingFilePath(
+                workingDirectory,
+                temporaryXml,
+                "XRechnung"
+            );
+
+            validateWorkingFilePath(
+                workingDirectory,
+                temporaryPdf,
+                "PDF-Rechnung"
+            );
+
             Files.copy(
                 sourceXml,
                 temporaryXml,
@@ -238,6 +369,16 @@ public class InvoiceDocumentServiceImpl
                 StandardCopyOption.REPLACE_EXISTING
             );
 
+            validateTemporaryFile(
+                temporaryXml,
+                "XRechnung"
+            );
+
+            validateTemporaryFile(
+                temporaryPdf,
+                "PDF-Rechnung"
+            );
+
             return validateAndArchive(
                 invoice,
                 invoiceNumber,
@@ -246,12 +387,19 @@ public class InvoiceDocumentServiceImpl
                 workingDirectory
             );
 
-        } catch (InvalidXRechnungException exception) {
-            preserveWorkingDirectory = true;
+        } catch (
+            InvalidXRechnungException exception
+        ) {
+            preserveWorkingDirectory =
+                true;
+
             throw exception;
 
-        } catch (IOException exception) {
-            preserveWorkingDirectory = true;
+        } catch (
+            IOException exception
+        ) {
+            preserveWorkingDirectory =
+                true;
 
             throw new IllegalStateException(
                 "Die vorhandenen Rechnungsdokumente "
@@ -259,8 +407,12 @@ public class InvoiceDocumentServiceImpl
                 exception
             );
 
-        } catch (RuntimeException exception) {
-            preserveWorkingDirectory = true;
+        } catch (
+            RuntimeException exception
+        ) {
+            preserveWorkingDirectory =
+                true;
+
             throw exception;
 
         } finally {
@@ -361,15 +513,158 @@ public class InvoiceDocumentServiceImpl
 
         return new ArchivedInvoiceDocuments(
             invoiceNumber,
-            absolutePath(archiveDirectory),
-            absolutePath(archiveFiles.pdf()),
-            absolutePath(archiveFiles.xml()),
+            absolutePath(
+                archiveDirectory
+            ),
+            absolutePath(
+                archiveFiles.pdf()
+            ),
+            absolutePath(
+                archiveFiles.xml()
+            ),
             absolutePath(
                 archiveFiles.validationReport()
             ),
             true,
             validation.warnings()
         );
+    }
+
+    private void validateGeneratedXml(
+        GeneratedXRechnung generatedXml
+    ) {
+        if (generatedXml == null) {
+            throw new IllegalStateException(
+                "Die XRechnung wurde nicht erzeugt."
+            );
+        }
+
+        normalizeInvoiceNumber(
+            generatedXml.invoiceNumber()
+        );
+
+        byte[] content =
+            generatedXml.content();
+
+        if (
+            content == null
+                || content.length == 0
+        ) {
+            throw new IllegalStateException(
+                "Die erzeugte XRechnung enthält keine Daten."
+            );
+        }
+    }
+
+    private void validateGeneratedPdf(
+        GeneratedInvoicePdf generatedPdf
+    ) {
+        if (generatedPdf == null) {
+            throw new IllegalStateException(
+                "Die PDF-Rechnung wurde nicht erzeugt."
+            );
+        }
+
+        normalizeInvoiceNumber(
+            generatedPdf.invoiceNumber()
+        );
+
+        byte[] content =
+            generatedPdf.content();
+
+        if (
+            content == null
+                || content.length == 0
+        ) {
+            throw new IllegalStateException(
+                "Die erzeugte PDF-Rechnung enthält keine Daten."
+            );
+        }
+    }
+
+    private void validateWorkingFilePath(
+        Path workingDirectory,
+        Path file,
+        String documentType
+    ) {
+        requirePath(
+            workingDirectory,
+            "Arbeitsverzeichnis"
+        );
+
+        requirePath(
+            file,
+            documentType
+        );
+
+        Path normalizedWorkingDirectory =
+            workingDirectory
+                .toAbsolutePath()
+                .normalize();
+
+        Path normalizedFile =
+            file
+                .toAbsolutePath()
+                .normalize();
+
+        if (
+            !normalizedFile.startsWith(
+                normalizedWorkingDirectory
+            )
+        ) {
+            throw new IllegalStateException(
+                "Der temporäre Dateipfad für "
+                    + documentType
+                    + " liegt außerhalb des "
+                    + "Arbeitsverzeichnisses."
+            );
+        }
+    }
+
+    private void validateTemporaryFile(
+        Path file,
+        String documentType
+    ) {
+        requirePath(
+            file,
+            documentType
+        );
+
+        if (!Files.isRegularFile(file)) {
+            throw new IllegalStateException(
+                documentType
+                    + " wurde nicht temporär erzeugt: "
+                    + file
+            );
+        }
+
+        if (!Files.isReadable(file)) {
+            throw new IllegalStateException(
+                documentType
+                    + " ist nicht lesbar: "
+                    + file
+            );
+        }
+
+        try {
+            if (Files.size(file) == 0) {
+                throw new IllegalStateException(
+                    documentType
+                        + " ist leer: "
+                        + file
+                );
+            }
+
+        } catch (
+            IOException exception
+        ) {
+            throw new IllegalStateException(
+                documentType
+                    + " konnte nicht geprüft werden: "
+                    + file,
+                exception
+            );
+        }
     }
 
     private InvoiceDocumentArchiveEntity saveArchiveEntry(
@@ -406,7 +701,9 @@ public class InvoiceDocumentServiceImpl
 
         InvoiceDocumentArchiveEntity entity =
             archiveRepository
-                .findByInvoiceId(invoiceId)
+                .findByInvoiceId(
+                    invoiceId
+                )
                 .orElseGet(
                     InvoiceDocumentArchiveEntity::new
                 );
@@ -420,7 +717,9 @@ public class InvoiceDocumentServiceImpl
         );
 
         entity.setArchiveDirectory(
-            absolutePath(archiveDirectory)
+            absolutePath(
+                archiveDirectory
+            )
         );
 
         entity.setPdfFile(
@@ -447,7 +746,9 @@ public class InvoiceDocumentServiceImpl
             )
         );
 
-        entity.setValid(true);
+        entity.setValid(
+            true
+        );
 
         entity.setArchivedAt(
             archivedAt
@@ -462,7 +763,9 @@ public class InvoiceDocumentServiceImpl
         InvoiceEntity invoice,
         InvoiceDocumentArchiveEntity archive
     ) {
-        invoice.setArchived(true);
+        invoice.setArchived(
+            true
+        );
 
         invoice.setArchivedAt(
             archive.getArchivedAt()
@@ -481,7 +784,9 @@ public class InvoiceDocumentServiceImpl
         Long invoiceId
     ) {
         return invoiceRepository
-            .findById(invoiceId)
+            .findById(
+                invoiceId
+            )
             .orElseThrow(() ->
                 new ResourceNotFoundException(
                     "Rechnung mit ID "
@@ -534,9 +839,21 @@ public class InvoiceDocumentServiceImpl
                 invoice.getInvoiceNumber()
             );
 
+        String configuredArchiveDirectory =
+            properties.getArchiveDirectory();
+
+        if (
+            configuredArchiveDirectory == null
+                || configuredArchiveDirectory.isBlank()
+        ) {
+            throw new IllegalStateException(
+                "Das Archivverzeichnis ist nicht konfiguriert."
+            );
+        }
+
         Path archiveRoot =
             Path.of(
-                    properties.getArchiveDirectory()
+                    configuredArchiveDirectory
                 )
                 .toAbsolutePath()
                 .normalize();
@@ -547,17 +864,23 @@ public class InvoiceDocumentServiceImpl
 
         String invoiceYear =
             String.valueOf(
-                invoice.getInvoiceDate().getYear()
+                invoice
+                    .getInvoiceDate()
+                    .getYear()
             );
 
         Path yearDirectory =
             archiveRoot
-                .resolve(invoiceYear)
+                .resolve(
+                    invoiceYear
+                )
                 .normalize();
 
         Path invoiceTypeDirectory =
             yearDirectory
-                .resolve(INVOICE_DIRECTORY)
+                .resolve(
+                    INVOICE_DIRECTORY
+                )
                 .normalize();
 
         Path archiveDirectory =
@@ -569,7 +892,9 @@ public class InvoiceDocumentServiceImpl
                 )
                 .normalize();
 
-        if (!yearDirectory.startsWith(archiveRoot)) {
+        if (!yearDirectory.startsWith(
+            archiveRoot
+        )) {
             throw new IllegalStateException(
                 "Das ermittelte Jahresverzeichnis "
                     + "liegt außerhalb des Archivs."
@@ -698,7 +1023,9 @@ public class InvoiceDocumentServiceImpl
                 );
             }
 
-        } catch (IOException exception) {
+        } catch (
+            IOException exception
+        ) {
             throw new IllegalStateException(
                 documentType
                     + " konnte nicht geprüft werden: "
@@ -753,6 +1080,11 @@ public class InvoiceDocumentServiceImpl
         String documentType
     ) throws IOException {
 
+        requirePath(
+            file,
+            documentType + " Zielpfad"
+        );
+
         if (
             content == null
                 || content.length == 0
@@ -788,13 +1120,17 @@ public class InvoiceDocumentServiceImpl
         }
 
         Path directory =
-            Path.of(configuredDirectory)
+            Path.of(
+                    configuredDirectory
+                )
                 .toAbsolutePath()
                 .normalize();
 
         Path file =
             directory
-                .resolve(fileName)
+                .resolve(
+                    fileName
+                )
                 .normalize();
 
         if (!file.startsWith(directory)) {
@@ -842,7 +1178,9 @@ public class InvoiceDocumentServiceImpl
 
         try {
             Path tempRoot =
-                Path.of(tempDirectory)
+                Path.of(
+                        tempDirectory
+                    )
                     .toAbsolutePath()
                     .normalize();
 
@@ -851,13 +1189,17 @@ public class InvoiceDocumentServiceImpl
             );
 
             String directoryName =
-                safeDirectoryName(invoiceNumber)
+                safeDirectoryName(
+                    invoiceNumber
+                )
                     + "-"
                     + UUID.randomUUID();
 
             Path workingDirectory =
                 tempRoot
-                    .resolve(directoryName)
+                    .resolve(
+                        directoryName
+                    )
                     .normalize();
 
             if (
@@ -876,7 +1218,9 @@ public class InvoiceDocumentServiceImpl
                 workingDirectory
             );
 
-        } catch (IOException exception) {
+        } catch (
+            IOException exception
+        ) {
             throw new IllegalStateException(
                 "Das temporäre Arbeitsverzeichnis "
                     + "konnte nicht angelegt werden.",
@@ -886,30 +1230,26 @@ public class InvoiceDocumentServiceImpl
     }
 
     private void verifyInvoiceNumbers(
-        String xmlInvoiceNumber,
-        String pdfInvoiceNumber
+        String firstInvoiceNumber,
+        String secondInvoiceNumber
     ) {
-        String normalizedXmlNumber =
+        String first =
             normalizeInvoiceNumber(
-                xmlInvoiceNumber
+                firstInvoiceNumber
             );
 
-        String normalizedPdfNumber =
+        String second =
             normalizeInvoiceNumber(
-                pdfInvoiceNumber
+                secondInvoiceNumber
             );
 
-        if (
-            !normalizedXmlNumber.equals(
-                normalizedPdfNumber
-            )
-        ) {
+        if (!first.equals(second)) {
             throw new IllegalStateException(
-                "PDF und XRechnung besitzen nicht "
-                    + "dieselbe Rechnungsnummer. XML: "
-                    + normalizedXmlNumber
-                    + ", PDF: "
-                    + normalizedPdfNumber
+                "Die Rechnungsnummern stimmen nicht überein. "
+                    + "Erste Rechnungsnummer: "
+                    + first
+                    + ", zweite Rechnungsnummer: "
+                    + second
             );
         }
     }
@@ -1023,15 +1363,23 @@ public class InvoiceDocumentServiceImpl
                         Files.deleteIfExists(
                             path
                         );
-                    } catch (IOException ignored) {
-                        // Aufräumfehler verändern das
-                        // fachliche Ergebnis nicht.
+                    } catch (
+                        IOException ignored
+                    ) {
+                        /*
+                         * Aufräumfehler verändern
+                         * das fachliche Ergebnis nicht.
+                         */
                     }
                 });
 
-        } catch (IOException ignored) {
-            // Aufräumfehler verändern das
-            // fachliche Ergebnis nicht.
+        } catch (
+            IOException ignored
+        ) {
+            /*
+             * Aufräumfehler verändern
+             * das fachliche Ergebnis nicht.
+             */
         }
     }
 

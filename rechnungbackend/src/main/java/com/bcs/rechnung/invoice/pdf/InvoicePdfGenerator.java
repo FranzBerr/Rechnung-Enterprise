@@ -20,898 +20,2481 @@ import java.text.NumberFormat;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 @Component
 public class InvoicePdfGenerator {
 
-    private static final float LEFT_MARGIN = 45.0f;
-    private static final float RIGHT_MARGIN = 45.0f;
-    private static final float TOP_MARGIN = 42.0f;
-    private static final float BOTTOM_MARGIN = 48.0f;
-    private static final float CONTENT_WIDTH =
-        PDRectangle.A4.getWidth() - LEFT_MARGIN - RIGHT_MARGIN;
+    private static final float LEFT_MARGIN =
+        45.0f;
 
-    private static final float NORMAL_FONT_SIZE = 9.0f;
-    private static final float SMALL_FONT_SIZE = 8.0f;
-    private static final float TITLE_FONT_SIZE = 18.0f;
-    private static final float TABLE_HEADER_HEIGHT = 24.0f;
-    private static final float TABLE_LINE_HEIGHT = 11.0f;
-    private static final float TABLE_ROW_PADDING = 5.0f;
+    private static final float RIGHT_MARGIN =
+        45.0f;
 
-    private static final float POSITION_X = LEFT_MARGIN;
-    private static final float DESCRIPTION_X = 74.0f;
-    private static final float DESCRIPTION_WIDTH = 220.0f;
-    private static final float QUANTITY_RIGHT_X = 350.0f;
-    private static final float UNIT_X = 360.0f;
-    private static final float PRICE_RIGHT_X = 462.0f;
-    private static final float TOTAL_RIGHT_X =
-        PDRectangle.A4.getWidth() - RIGHT_MARGIN;
+    private static final float TOP_MARGIN =
+        42.0f;
 
-    private static final DateTimeFormatter DATE_FORMAT =
-        DateTimeFormatter.ofPattern("dd.MM.yyyy");
+    private static final float BOTTOM_MARGIN =
+        48.0f;
 
-    public byte[] generate(InvoiceEntity invoice) throws IOException {
-        if (invoice == null) {
-            throw new IllegalArgumentException("Die Rechnung darf nicht null sein.");
-        }
+    private static final float PAGE_WIDTH =
+        PDRectangle.A4.getWidth();
 
-        try (PDDocument document = new PDDocument();
-             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+    private static final float PAGE_HEIGHT =
+        PDRectangle.A4.getHeight();
 
-            PDFont regularFont = new PDType1Font(
-                Standard14Fonts.FontName.HELVETICA
-            );
-            PDFont boldFont = new PDType1Font(
-                Standard14Fonts.FontName.HELVETICA_BOLD
-            );
+    private static final float NORMAL_FONT_SIZE =
+        9.0f;
 
-            PageState state = openPage(document, regularFont, boldFont);
-            writeFirstPageHeader(state, invoice);
-            writeTableHeader(state);
+    private static final float SMALL_FONT_SIZE =
+        8.0f;
 
-            List<InvoiceItemEntity> items = invoice.getItems() == null
-                ? Collections.emptyList()
-                : invoice.getItems();
+    private static final float FOOTER_FONT_SIZE =
+        7.0f;
 
-            for (InvoiceItemEntity item : items) {
-                List<String> descriptionLines = wrapText(
-                    buildDescription(item),
-                    state.regularFont,
-                    SMALL_FONT_SIZE,
-                    DESCRIPTION_WIDTH
+    private static final float TABLE_FONT_SIZE =
+        7.2f;
+
+    private static final float TABLE_HEADER_FONT_SIZE =
+        7.0f;
+
+    private static final float TITLE_FONT_SIZE =
+        18.0f;
+
+    private static final float LINE_HEIGHT =
+        13.0f;
+
+    private static final float TABLE_HEADER_HEIGHT =
+        20.0f;
+
+    private static final float ITEM_TEXT_LINE_HEIGHT =
+        10.5f;
+
+    private static final float ITEM_VERTICAL_PADDING =
+        5.0f;
+
+    private static final float ITEM_BOTTOM_SPACING =
+        5.0f;
+
+    /*
+     * Abstand zwischen der Unterstreichung
+     * "Rechnungsempfänger" und dem Kundennamen.
+     */
+    private static final float CUSTOMER_HEADING_GAP =
+        14.5f;
+
+    /*
+     * Abstand nach der vollständigen
+     * Empfängeranschrift.
+     */
+    private static final float CUSTOMER_BLOCK_BOTTOM_GAP =
+        20.0f;
+
+    /*
+     * Abstand zwischen der Trennlinie
+     * und der Zeile "Gesamtbetrag".
+     */
+    private static final float TOTAL_SEPARATOR_BOTTOM_GAP =
+        10.0f;
+
+    /*
+     * Positionsspalten
+     */
+    private static final float POSITION_X =
+        LEFT_MARGIN;
+
+    private static final float DESCRIPTION_X =
+        72.0f;
+
+    private static final float DESCRIPTION_MAX_WIDTH =
+        175.0f;
+
+    private static final float QUANTITY_RIGHT_X =
+        320.0f;
+
+    private static final float UNIT_PRICE_RIGHT_X =
+        395.0f;
+
+    private static final float VAT_RIGHT_X =
+        435.0f;
+
+    private static final float VAT_AMOUNT_RIGHT_X =
+        490.0f;
+
+    private static final float NET_TOTAL_RIGHT_X =
+        PAGE_WIDTH - RIGHT_MARGIN;
+
+    private static final Locale GERMAN_LOCALE =
+        Locale.GERMANY;
+
+    private static final DateTimeFormatter DATE_FORMATTER =
+        DateTimeFormatter.ofPattern(
+            "dd.MM.yyyy"
+        );
+
+    private final PDFont fontRegular =
+        new PDType1Font(
+            Standard14Fonts.FontName.HELVETICA
+        );
+
+    private final PDFont fontBold =
+        new PDType1Font(
+            Standard14Fonts.FontName.HELVETICA_BOLD
+        );
+
+    public byte[] generate(
+        InvoiceEntity invoice
+    ) throws IOException {
+
+        validateInvoice(
+            invoice
+        );
+
+        try (
+            PDDocument document =
+                new PDDocument();
+
+            ByteArrayOutputStream output =
+                new ByteArrayOutputStream()
+        ) {
+            PdfContext context =
+                createPage(
+                    document
                 );
 
-                float rowHeight = Math.max(
-                    TABLE_LINE_HEIGHT + (TABLE_ROW_PADDING * 2.0f),
-                    (descriptionLines.size() * TABLE_LINE_HEIGHT)
-                        + (TABLE_ROW_PADDING * 2.0f)
+            context =
+                drawHeader(
+                    document,
+                    context,
+                    invoice
                 );
 
-                if (!hasSpace(state, rowHeight)) {
-                    state.close();
-                    state = openPage(document, regularFont, boldFont);
-                    writeContinuationHeader(state, invoice);
-                    writeTableHeader(state);
-                }
+            context =
+                drawCustomerAddress(
+                    document,
+                    context,
+                    invoice
+                );
 
-                writeItemRow(state, item, descriptionLines, rowHeight);
-            }
+            context =
+                drawInvoiceReferences(
+                    document,
+                    context,
+                    invoice
+                );
 
-            if (!hasSpace(state, 190.0f)) {
-                state.close();
-                state = openPage(document, regularFont, boldFont);
-                writeContinuationHeader(state, invoice);
-            }
+            context =
+                drawItems(
+                    document,
+                    context,
+                    invoice
+                );
 
-            writeTotals(state, invoice);
+            context =
+                drawTotals(
+                    document,
+                    context,
+                    invoice
+                );
 
-            if (!hasSpace(state, 115.0f)) {
-                state.close();
-                state = openPage(document, regularFont, boldFont);
-                writeContinuationHeader(state, invoice);
-            }
+            context =
+                drawPaymentTerms(
+                    document,
+                    context,
+                    invoice
+                );
 
-            writePaymentInformation(state, invoice);
-            state = writeNotes(document, state, invoice, regularFont, boldFont);
-            state.close();
+            context =
+                drawPaymentInformation(
+                    document,
+                    context,
+                    invoice
+                );
 
-            addPageNumbers(document, regularFont);
-            document.save(output);
+            context =
+                drawNotes(
+                    document,
+                    context,
+                    invoice
+                );
+
+            /*
+             * Letzten ContentStream des
+             * Rechnungsinhalts schließen.
+             */
+            context.contentStream()
+                .close();
+
+            /*
+             * Erst nach dem Erzeugen aller Seiten
+             * stehen Seitenzahl und Gesamtseitenzahl fest.
+             */
+            drawFooters(
+                document,
+                invoice
+            );
+
+            document.save(
+                output
+            );
+
             return output.toByteArray();
         }
     }
 
-    private PageState openPage(
+    private PdfContext drawHeader(
         PDDocument document,
-        PDFont regularFont,
-        PDFont boldFont
-    ) throws IOException {
-        PDPage page = new PDPage(PDRectangle.A4);
-        document.addPage(page);
-
-        PDPageContentStream content = new PDPageContentStream(
-            document,
-            page
-        );
-
-        float startY = page.getMediaBox().getHeight() - TOP_MARGIN;
-        return new PageState(page, content, regularFont, boldFont, startY);
-    }
-
-    private void writeFirstPageHeader(
-        PageState state,
+        PdfContext context,
         InvoiceEntity invoice
     ) throws IOException {
-        CompanyEntity company = invoice.getCompany();
 
-        String companyName = company == null ? "" : safe(company.getName());
-        String companyStreet = company == null ? "" : safe(company.getStreet());
-        String companyLocation = company == null
-            ? ""
-            : joinNonBlank(company.getZipCode(), company.getCity());
-        String companyCountry = company == null ? "" : safe(company.getCountry());
+        context =
+            ensureSpace(
+                document,
+                context,
+                135.0f
+            );
 
-        writeText(
-            state.content,
-            state.boldFont,
-            14.0f,
-            LEFT_MARGIN,
-            state.y,
-            companyName
-        );
+        CompanyEntity company =
+            invoice.getCompany();
 
-        writeTextRightAligned(
-            state.content,
-            state.boldFont,
+        float leftY =
+            context.y();
+
+        float rightY =
+            context.y();
+
+        float rightX =
+            PAGE_WIDTH - RIGHT_MARGIN;
+
+        float labelRightX =
+            rightX - 125.0f;
+
+        drawText(
+            context.contentStream(),
+            fontBold,
             TITLE_FONT_SIZE,
-            TOTAL_RIGHT_X,
-            state.y,
-            "RECHNUNG"
+            LEFT_MARGIN,
+            leftY,
+            "Rechnung"
         );
 
-        state.moveDown(18.0f);
-        writeOptionalLine(state, companyStreet);
-        writeOptionalLine(state, companyLocation);
-        writeOptionalLine(state, companyCountry);
+        leftY -= 24.0f;
 
-        state.y = state.page.getMediaBox().getHeight() - 112.0f;
-        drawLine(state, state.y, 0.7f, 0.55f);
-        state.moveDown(22.0f);
+        if (company != null) {
 
-        writeText(
-            state.content,
-            state.regularFont,
+            drawText(
+                context.contentStream(),
+                fontBold,
+                NORMAL_FONT_SIZE,
+                LEFT_MARGIN,
+                leftY,
+                safe(
+                    company.getName()
+                )
+            );
+
+            leftY -= LINE_HEIGHT;
+
+            if (notBlank(
+                company.getStreet()
+            )) {
+
+                drawText(
+                    context.contentStream(),
+                    fontRegular,
+                    SMALL_FONT_SIZE,
+                    LEFT_MARGIN,
+                    leftY,
+                    company.getStreet()
+                );
+
+                leftY -= LINE_HEIGHT;
+            }
+
+            String companyCity =
+                joinNonBlank(
+                    company.getZipCode(),
+                    company.getCity()
+                );
+
+            if (notBlank(
+                companyCity
+            )) {
+
+                drawText(
+                    context.contentStream(),
+                    fontRegular,
+                    SMALL_FONT_SIZE,
+                    LEFT_MARGIN,
+                    leftY,
+                    companyCity
+                );
+
+                leftY -= LINE_HEIGHT;
+            }
+        }
+
+        rightY =
+            drawHeaderRightRow(
+                context.contentStream(),
+                labelRightX,
+                rightX,
+                rightY,
+                "Rechnungsnummer:",
+                invoice.getInvoiceNumber()
+            );
+
+        rightY =
+            drawHeaderRightRow(
+                context.contentStream(),
+                labelRightX,
+                rightX,
+                rightY,
+                "Rechnungsdatum:",
+                formatDate(
+                    invoice.getInvoiceDate()
+                )
+            );
+
+        if (invoice.getServiceDate() != null) {
+
+            rightY =
+                drawHeaderRightRow(
+                    context.contentStream(),
+                    labelRightX,
+                    rightX,
+                    rightY,
+                    "Leistungsdatum:",
+                    formatDate(
+                        invoice.getServiceDate()
+                    )
+                );
+        }
+
+        if (notBlank(
+            invoice.getCustomerNumber()
+        )) {
+
+            rightY =
+                drawHeaderRightRow(
+                    context.contentStream(),
+                    labelRightX,
+                    rightX,
+                    rightY,
+                    "Kundennummer:",
+                    invoice.getCustomerNumber()
+                );
+        }
+
+        if (notBlank(
+            invoice.getOrderReference()
+        )) {
+
+            rightY =
+                drawHeaderRightRow(
+                    context.contentStream(),
+                    labelRightX,
+                    rightX,
+                    rightY,
+                    "Auftragsreferenz:",
+                    invoice.getOrderReference()
+                );
+        }
+
+        if (invoice.getDueDate() != null) {
+
+            rightY =
+                drawHeaderRightRow(
+                    context.contentStream(),
+                    labelRightX,
+                    rightX,
+                    rightY,
+                    "Fällig am:",
+                    formatDate(
+                        invoice.getDueDate()
+                    )
+                );
+        }
+
+        if (company != null
+            && notBlank(
+            company.getVatId()
+        )) {
+
+            rightY =
+                drawHeaderRightRow(
+                    context.contentStream(),
+                    labelRightX,
+                    rightX,
+                    rightY,
+                    "USt-IdNr.:",
+                    company.getVatId()
+                );
+        }
+
+        if (company != null
+            && notBlank(
+            company.getTaxNumber()
+        )) {
+
+            rightY =
+                drawHeaderRightRow(
+                    context.contentStream(),
+                    labelRightX,
+                    rightX,
+                    rightY,
+                    "Steuernummer:",
+                    company.getTaxNumber()
+                );
+        }
+
+        return context.withY(
+            Math.min(
+                leftY,
+                rightY
+            ) - 12.0f
+        );
+    }
+
+    private float drawHeaderRightRow(
+        PDPageContentStream contentStream,
+        float labelRightX,
+        float valueRightX,
+        float y,
+        String label,
+        String value
+    ) throws IOException {
+
+        drawTextRight(
+            contentStream,
+            fontBold,
             SMALL_FONT_SIZE,
-            LEFT_MARGIN,
-            state.y,
-            "Rechnungsempfänger"
+            labelRightX,
+            y,
+            label
         );
 
-        state.moveDown(16.0f);
-        writeText(
-            state.content,
-            state.boldFont,
-            11.0f,
-            LEFT_MARGIN,
-            state.y,
-            safe(invoice.getCustomerName())
+        drawTextRight(
+            contentStream,
+            fontRegular,
+            SMALL_FONT_SIZE,
+            valueRightX,
+            y,
+            safe(
+                value
+            )
         );
-        state.moveDown(15.0f);
-        writeOptionalLine(state, invoice.getCustomerStreet());
-        writeOptionalLine(
-            state,
+
+        return y - LINE_HEIGHT;
+    }
+
+    private PdfContext drawCustomerAddress(
+        PDDocument document,
+        PdfContext context,
+        InvoiceEntity invoice
+    ) throws IOException {
+
+        context =
+            ensureSpace(
+                document,
+                context,
+                120.0f
+            );
+
+        float y =
+            context.y();
+
+        String heading =
+            "Rechnungsempfänger";
+
+        drawText(
+            context.contentStream(),
+            fontBold,
+            NORMAL_FONT_SIZE,
+            LEFT_MARGIN,
+            y,
+            heading
+        );
+
+        float headingWidth =
+            calculateTextWidth(
+                fontBold,
+                NORMAL_FONT_SIZE,
+                heading
+            );
+
+        float underlineY =
+            y - 2.5f;
+
+        /*
+         * Unterstreichung 6 pt länger
+         * als die Überschrift.
+         */
+        drawLine(
+            context.contentStream(),
+            LEFT_MARGIN,
+            underlineY,
+            LEFT_MARGIN
+                + headingWidth
+                + 6.0f,
+            underlineY
+        );
+
+        /*
+         * Abstand zwischen Unterstreichung
+         * und Kundenname.
+         */
+        y -= CUSTOMER_HEADING_GAP;
+
+        if (notBlank(
+            invoice.getCustomerName()
+        )) {
+
+            drawText(
+                context.contentStream(),
+                fontBold,
+                NORMAL_FONT_SIZE,
+                LEFT_MARGIN,
+                y,
+                invoice.getCustomerName()
+            );
+
+            y -= LINE_HEIGHT;
+        }
+
+        if (notBlank(
+            invoice.getCustomerStreet()
+        )) {
+
+            drawText(
+                context.contentStream(),
+                fontRegular,
+                NORMAL_FONT_SIZE,
+                LEFT_MARGIN,
+                y,
+                invoice.getCustomerStreet()
+            );
+
+            y -= LINE_HEIGHT;
+        }
+
+        String customerCity =
             joinNonBlank(
                 invoice.getCustomerZipCode(),
                 invoice.getCustomerCity()
-            )
-        );
-        writeOptionalLine(state, invoice.getCustomerCountry());
+            );
 
-        float labelX = 350.0f;
-        float valueRightX = TOTAL_RIGHT_X;
-        float informationY = state.page.getMediaBox().getHeight() - 150.0f;
+        if (notBlank(
+            customerCity
+        )) {
 
-        writeLabelValue(
-            state,
-            labelX,
-            valueRightX,
-            informationY,
-            "Rechnungsnummer:",
-            invoiceNumber(invoice)
-        );
-        informationY -= 14.0f;
-        writeLabelValue(
-            state,
-            labelX,
-            valueRightX,
-            informationY,
-            "Rechnungsdatum:",
-            formatDate(invoice.getInvoiceDate())
-        );
-        informationY -= 14.0f;
-        writeLabelValue(
-            state,
-            labelX,
-            valueRightX,
-            informationY,
-            "Leistungsdatum:",
-            formatDate(invoice.getServiceDate())
-        );
-        informationY -= 14.0f;
-        writeLabelValue(
-            state,
-            labelX,
-            valueRightX,
-            informationY,
-            "Fällig am:",
-            formatDate(invoice.getDueDate())
-        );
-        informationY -= 14.0f;
-        writeLabelValue(
-            state,
-            labelX,
-            valueRightX,
-            informationY,
-            "Kundennummer:",
-            safe(invoice.getCustomerNumber())
-        );
+            drawText(
+                context.contentStream(),
+                fontRegular,
+                NORMAL_FONT_SIZE,
+                LEFT_MARGIN,
+                y,
+                customerCity
+            );
 
-        state.y = Math.min(state.y, informationY) - 28.0f;
+            y -= LINE_HEIGHT;
+        }
+
+        if (notBlank(
+            invoice.getCustomerCountry()
+        )) {
+
+            drawText(
+                context.contentStream(),
+                fontRegular,
+                NORMAL_FONT_SIZE,
+                LEFT_MARGIN,
+                y,
+                invoice.getCustomerCountry()
+            );
+
+            y -= LINE_HEIGHT;
+        }
+
+        return context.withY(
+            y - CUSTOMER_BLOCK_BOTTOM_GAP
+        );
     }
 
-    private void writeContinuationHeader(
-        PageState state,
+    private PdfContext drawInvoiceReferences(
+        PDDocument document,
+        PdfContext context,
         InvoiceEntity invoice
     ) throws IOException {
-        writeText(
-            state.content,
-            state.boldFont,
-            12.0f,
-            LEFT_MARGIN,
-            state.y,
-            "Rechnung " + invoiceNumber(invoice)
+
+        List<LabelValue> references =
+            new ArrayList<>();
+
+        if (notBlank(
+            invoice.getBuyerReference()
+        )) {
+
+            references.add(
+                new LabelValue(
+                    "Käuferreferenz:",
+                    invoice.getBuyerReference()
+                )
+            );
+        }
+
+        if (notBlank(
+            invoice.getProjectReference()
+        )) {
+
+            references.add(
+                new LabelValue(
+                    "Projektreferenz:",
+                    invoice.getProjectReference()
+                )
+            );
+        }
+
+        if (notBlank(
+            invoice.getContractReference()
+        )) {
+
+            references.add(
+                new LabelValue(
+                    "Vertragsreferenz:",
+                    invoice.getContractReference()
+                )
+            );
+        }
+
+        if (references.isEmpty()) {
+            return context;
+        }
+
+        context =
+            ensureSpace(
+                document,
+                context,
+                references.size()
+                    * LINE_HEIGHT
+                    + 12.0f
+            );
+
+        float y =
+            context.y();
+
+        for (LabelValue reference : references) {
+
+            y =
+                drawLabelValue(
+                    context.contentStream(),
+                    LEFT_MARGIN,
+                    LEFT_MARGIN + 115.0f,
+                    y,
+                    reference.label(),
+                    reference.value()
+                );
+        }
+
+        return context.withY(
+            y - 10.0f
+        );
+    }
+
+    private PdfContext drawItems(
+        PDDocument document,
+        PdfContext context,
+        InvoiceEntity invoice
+    ) throws IOException {
+
+        context =
+            ensureSpace(
+                document,
+                context,
+                TABLE_HEADER_HEIGHT
+                    + 25.0f
+            );
+
+        context =
+            drawTableHeader(
+                context
+            );
+
+        for (
+            InvoiceItemEntity item :
+            invoice.getItems()
+        ) {
+            List<String> descriptionLines =
+                createDescriptionLines(
+                    item.getDescription()
+                );
+
+            float descriptionHeight =
+                descriptionLines.size()
+                    * ITEM_TEXT_LINE_HEIGHT;
+
+            float rowHeight =
+                Math.max(
+                    TABLE_HEADER_HEIGHT,
+                    descriptionHeight
+                        + ITEM_VERTICAL_PADDING
+                        * 2.0f
+                );
+
+            if (context.y()
+                - rowHeight
+                - ITEM_BOTTOM_SPACING
+                < BOTTOM_MARGIN + 20.0f) {
+
+                context.contentStream()
+                    .close();
+
+                context =
+                    createPage(
+                        document
+                    );
+
+                context =
+                    drawContinuationHeader(
+                        context,
+                        invoice
+                    );
+
+                context =
+                    drawTableHeader(
+                        context
+                    );
+            }
+
+            float firstLineY =
+                context.y();
+
+            drawText(
+                context.contentStream(),
+                fontRegular,
+                TABLE_FONT_SIZE,
+                POSITION_X,
+                firstLineY,
+                String.valueOf(
+                    item.getPositionNumber()
+                )
+            );
+
+            float descriptionY =
+                firstLineY;
+
+            for (
+                String descriptionLine :
+                descriptionLines
+            ) {
+                drawText(
+                    context.contentStream(),
+                    fontRegular,
+                    TABLE_FONT_SIZE,
+                    DESCRIPTION_X,
+                    descriptionY,
+                    descriptionLine
+                );
+
+                descriptionY -=
+                    ITEM_TEXT_LINE_HEIGHT;
+            }
+
+            drawTextRight(
+                context.contentStream(),
+                fontRegular,
+                TABLE_FONT_SIZE,
+                QUANTITY_RIGHT_X,
+                firstLineY,
+                formatQuantity(
+                    item.getQuantity()
+                )
+                    + " "
+                    + formatUnit(
+                    item.getUnit()
+                )
+            );
+
+            drawTextRight(
+                context.contentStream(),
+                fontRegular,
+                TABLE_FONT_SIZE,
+                UNIT_PRICE_RIGHT_X,
+                firstLineY,
+                formatMoney(
+                    item.getUnitPriceNet()
+                )
+            );
+
+            drawTextRight(
+                context.contentStream(),
+                fontRegular,
+                TABLE_FONT_SIZE,
+                VAT_RIGHT_X,
+                firstLineY,
+                formatVatRate(
+                    item.getVatRate()
+                )
+            );
+
+            drawTextRight(
+                context.contentStream(),
+                fontRegular,
+                TABLE_FONT_SIZE,
+                VAT_AMOUNT_RIGHT_X,
+                firstLineY,
+                formatMoney(
+                    resolveItemTaxAmount(
+                        item
+                    )
+                )
+            );
+
+            drawTextRight(
+                context.contentStream(),
+                fontRegular,
+                TABLE_FONT_SIZE,
+                NET_TOTAL_RIGHT_X,
+                firstLineY,
+                formatMoney(
+                    item.getLineNet()
+                )
+            );
+
+            float separatorY =
+                firstLineY
+                    - rowHeight
+                    + 3.0f;
+
+            drawLine(
+                context.contentStream(),
+                LEFT_MARGIN,
+                separatorY,
+                PAGE_WIDTH - RIGHT_MARGIN,
+                separatorY
+            );
+
+            context =
+                context.withY(
+                    firstLineY
+                        - rowHeight
+                        - ITEM_BOTTOM_SPACING
+                );
+        }
+
+        return context.withY(
+            context.y() - 8.0f
+        );
+    }
+
+    private PdfContext drawTableHeader(
+        PdfContext context
+    ) throws IOException {
+
+        float y =
+            context.y();
+
+        drawText(
+            context.contentStream(),
+            fontBold,
+            TABLE_HEADER_FONT_SIZE,
+            POSITION_X,
+            y,
+            "Pos."
         );
 
-        writeTextRightAligned(
-            state.content,
-            state.regularFont,
+        drawText(
+            context.contentStream(),
+            fontBold,
+            TABLE_HEADER_FONT_SIZE,
+            DESCRIPTION_X,
+            y,
+            "Beschreibung"
+        );
+
+        drawTextRight(
+            context.contentStream(),
+            fontBold,
+            TABLE_HEADER_FONT_SIZE,
+            QUANTITY_RIGHT_X,
+            y,
+            "Menge"
+        );
+
+        drawTextRight(
+            context.contentStream(),
+            fontBold,
+            TABLE_HEADER_FONT_SIZE,
+            UNIT_PRICE_RIGHT_X,
+            y,
+            "Einzelpreis"
+        );
+
+        drawTextRight(
+            context.contentStream(),
+            fontBold,
+            TABLE_HEADER_FONT_SIZE,
+            VAT_RIGHT_X,
+            y,
+            "MwSt."
+        );
+
+        drawTextRight(
+            context.contentStream(),
+            fontBold,
+            TABLE_HEADER_FONT_SIZE,
+            VAT_AMOUNT_RIGHT_X,
+            y,
+            "MwSt.-Betrag"
+        );
+
+        drawTextRight(
+            context.contentStream(),
+            fontBold,
+            TABLE_HEADER_FONT_SIZE,
+            NET_TOTAL_RIGHT_X,
+            y,
+            "Netto"
+        );
+
+        drawLine(
+            context.contentStream(),
+            LEFT_MARGIN,
+            y - 5.0f,
+            PAGE_WIDTH - RIGHT_MARGIN,
+            y - 5.0f
+        );
+
+        return context.withY(
+            y - TABLE_HEADER_HEIGHT
+        );
+    }
+
+    private List<String> createDescriptionLines(
+        String description
+    ) throws IOException {
+
+        List<String> result =
+            new ArrayList<>();
+
+        if (!notBlank(
+            description
+        )) {
+
+            result.add(
+                ""
+            );
+
+            return result;
+        }
+
+        String normalized =
+            description
+                .replace(
+                    "\\r\\n",
+                    "\n"
+                )
+                .replace(
+                    "\\n",
+                    "\n"
+                )
+                .replace(
+                    "\\r",
+                    "\n"
+                )
+                .replaceAll(
+                    "(?i)<br\\s*/?>",
+                    "\n"
+                )
+                .replace(
+                    "\r\n",
+                    "\n"
+                )
+                .replace(
+                    '\r',
+                    '\n'
+                )
+                .replace(
+                    '\t',
+                    '\n'
+                )
+                .replace(
+                    '\u00A0',
+                    ' '
+                )
+                .replaceAll(
+                    " {2,}",
+                    "\n"
+                )
+                .trim();
+
+        String[] sourceLines =
+            normalized.split(
+                "\\n+"
+            );
+
+        for (String sourceLine : sourceLines) {
+
+            String trimmedLine =
+                sourceLine.trim();
+
+            if (!trimmedLine.isEmpty()) {
+
+                result.addAll(
+                    wrapDescriptionLine(
+                        trimmedLine
+                    )
+                );
+            }
+        }
+
+        if (result.isEmpty()) {
+
+            result.add(
+                ""
+            );
+        }
+
+        return result;
+    }
+
+    private List<String> wrapDescriptionLine(
+        String text
+    ) throws IOException {
+
+        List<String> lines =
+            new ArrayList<>();
+
+        String[] words =
+            text.trim()
+                .split(
+                    "\\s+"
+                );
+
+        StringBuilder currentLine =
+            new StringBuilder();
+
+        for (String word : words) {
+
+            String candidate =
+                currentLine.isEmpty()
+                    ? word
+                    : currentLine
+                    + " "
+                    + word;
+
+            if (calculateTextWidth(
+                fontRegular,
+                TABLE_FONT_SIZE,
+                candidate
+            ) <= DESCRIPTION_MAX_WIDTH) {
+
+                currentLine.setLength(
+                    0
+                );
+
+                currentLine.append(
+                    candidate
+                );
+
+                continue;
+            }
+
+            if (!currentLine.isEmpty()) {
+
+                lines.add(
+                    currentLine.toString()
+                );
+
+                currentLine.setLength(
+                    0
+                );
+            }
+
+            if (calculateTextWidth(
+                fontRegular,
+                TABLE_FONT_SIZE,
+                word
+            ) <= DESCRIPTION_MAX_WIDTH) {
+
+                currentLine.append(
+                    word
+                );
+
+            } else {
+
+                lines.addAll(
+                    splitLongWord(
+                        word
+                    )
+                );
+            }
+        }
+
+        if (!currentLine.isEmpty()) {
+
+            lines.add(
+                currentLine.toString()
+            );
+        }
+
+        return lines;
+    }
+
+    private List<String> splitLongWord(
+        String word
+    ) throws IOException {
+
+        List<String> result =
+            new ArrayList<>();
+
+        StringBuilder currentPart =
+            new StringBuilder();
+
+        for (
+            int index = 0;
+            index < word.length();
+            index++
+        ) {
+            char character =
+                word.charAt(
+                    index
+                );
+
+            String candidate =
+                currentPart.toString()
+                    + character;
+
+            if (calculateTextWidth(
+                fontRegular,
+                TABLE_FONT_SIZE,
+                candidate
+            ) <= DESCRIPTION_MAX_WIDTH) {
+
+                currentPart.append(
+                    character
+                );
+
+                continue;
+            }
+
+            if (!currentPart.isEmpty()) {
+
+                result.add(
+                    currentPart.toString()
+                );
+
+                currentPart.setLength(
+                    0
+                );
+            }
+
+            currentPart.append(
+                character
+            );
+        }
+
+        if (!currentPart.isEmpty()) {
+
+            result.add(
+                currentPart.toString()
+            );
+        }
+
+        return result;
+    }
+
+    private float calculateTextWidth(
+        PDFont font,
+        float fontSize,
+        String text
+    ) throws IOException {
+
+        String printableText =
+            sanitizePdfText(
+                text
+            );
+
+        return font.getStringWidth(
+            printableText
+        )
+            / 1000.0f
+            * fontSize;
+    }
+
+    private PdfContext drawContinuationHeader(
+        PdfContext context,
+        InvoiceEntity invoice
+    ) throws IOException {
+
+        float y =
+            context.y();
+
+        drawText(
+            context.contentStream(),
+            fontBold,
             NORMAL_FONT_SIZE,
-            TOTAL_RIGHT_X,
-            state.y,
+            LEFT_MARGIN,
+            y,
+            "Rechnung "
+                + safe(
+                invoice.getInvoiceNumber()
+            )
+        );
+
+        drawTextRight(
+            context.contentStream(),
+            fontRegular,
+            SMALL_FONT_SIZE,
+            PAGE_WIDTH - RIGHT_MARGIN,
+            y,
             "Fortsetzung"
         );
 
-        state.moveDown(18.0f);
-        drawLine(state, state.y, 0.7f, 0.55f);
-        state.moveDown(18.0f);
+        return context.withY(
+            y - 25.0f
+        );
     }
 
-    private void writeTableHeader(PageState state) throws IOException {
-        float topY = state.y;
+    private BigDecimal resolveItemTaxAmount(
+        InvoiceItemEntity item
+    ) {
 
-        state.content.setNonStrokingColor(0.90f, 0.92f, 0.95f);
-        state.content.addRect(
-            LEFT_MARGIN,
-            topY - TABLE_HEADER_HEIGHT,
-            CONTENT_WIDTH,
-            TABLE_HEADER_HEIGHT
-        );
-        state.content.fill();
-        state.content.setNonStrokingColor(0.0f, 0.0f, 0.0f);
+        if (item.getTaxAmount() != null) {
 
-        float textY = topY - 16.0f;
-        writeText(state.content, state.boldFont, SMALL_FONT_SIZE,
-            POSITION_X, textY, "Pos.");
-        writeText(state.content, state.boldFont, SMALL_FONT_SIZE,
-            DESCRIPTION_X, textY, "Beschreibung");
-        writeTextRightAligned(state.content, state.boldFont, SMALL_FONT_SIZE,
-            QUANTITY_RIGHT_X, textY, "Menge");
-        writeText(state.content, state.boldFont, SMALL_FONT_SIZE,
-            UNIT_X, textY, "Einheit");
-        writeTextRightAligned(state.content, state.boldFont, SMALL_FONT_SIZE,
-            PRICE_RIGHT_X, textY, "Einzelpreis");
-        writeTextRightAligned(state.content, state.boldFont, SMALL_FONT_SIZE,
-            TOTAL_RIGHT_X, textY, "Gesamt");
-
-        state.y = topY - TABLE_HEADER_HEIGHT;
-    }
-
-    private void writeItemRow(
-        PageState state,
-        InvoiceItemEntity item,
-        List<String> descriptionLines,
-        float rowHeight
-    ) throws IOException {
-        float rowTop = state.y;
-        float firstLineY = rowTop - TABLE_ROW_PADDING - SMALL_FONT_SIZE;
-
-        writeText(
-            state.content,
-            state.regularFont,
-            SMALL_FONT_SIZE,
-            POSITION_X,
-            firstLineY,
-            item.getPositionNumber() == null
-                ? ""
-                : String.valueOf(item.getPositionNumber())
-        );
-
-        float descriptionY = firstLineY;
-        for (String line : descriptionLines) {
-            writeText(
-                state.content,
-                state.regularFont,
-                SMALL_FONT_SIZE,
-                DESCRIPTION_X,
-                descriptionY,
-                line
-            );
-            descriptionY -= TABLE_LINE_HEIGHT;
+            return item.getTaxAmount()
+                .setScale(
+                    2,
+                    RoundingMode.HALF_UP
+                );
         }
 
-        writeTextRightAligned(
-            state.content,
-            state.regularFont,
-            SMALL_FONT_SIZE,
-            QUANTITY_RIGHT_X,
-            firstLineY,
-            formatQuantity(item.getQuantity())
-        );
-        writeText(
-            state.content,
-            state.regularFont,
-            SMALL_FONT_SIZE,
-            UNIT_X,
-            firstLineY,
-            safe(item.getUnit())
-        );
-        writeTextRightAligned(
-            state.content,
-            state.regularFont,
-            SMALL_FONT_SIZE,
-            PRICE_RIGHT_X,
-            firstLineY,
-            formatMoney(item.getUnitPriceNet())
-        );
-        writeTextRightAligned(
-            state.content,
-            state.regularFont,
-            SMALL_FONT_SIZE,
-            TOTAL_RIGHT_X,
-            firstLineY,
-            formatMoney(item.getLineNet())
-        );
+        if (item.getLineNet() == null
+            || item.getVatRate() == null) {
 
-        state.y = rowTop - rowHeight;
-        drawLine(state, state.y, 0.3f, 0.82f);
+            return BigDecimal.ZERO;
+        }
+
+        return item.getLineNet()
+            .multiply(
+                item.getVatRate()
+            )
+            .divide(
+                BigDecimal.valueOf(
+                    100
+                ),
+                2,
+                RoundingMode.HALF_UP
+            );
     }
 
-    private void writeTotals(
-        PageState state,
+    private PdfContext drawTotals(
+        PDDocument document,
+        PdfContext context,
         InvoiceEntity invoice
     ) throws IOException {
-        state.moveDown(20.0f);
 
-        float labelX = 360.0f;
-        float valueRightX = TOTAL_RIGHT_X;
+        Map<BigDecimal, TaxSummary> taxSummaries =
+            calculateTaxSummaries(
+                invoice
+            );
 
-        writeMoneyRow(
-            state,
+        float requiredHeight =
+            75.0f
+                + Math.max(
+                1,
+                taxSummaries.size()
+            )
+                * LINE_HEIGHT;
+
+        context =
+            ensureSpace(
+                document,
+                context,
+                requiredHeight
+            );
+
+        float labelX =
+            PAGE_WIDTH
+                - RIGHT_MARGIN
+                - 230.0f;
+
+        float amountX =
+            PAGE_WIDTH - RIGHT_MARGIN;
+
+        float y =
+            context.y();
+
+        drawAmountLine(
+            context.contentStream(),
             labelX,
-            valueRightX,
-            "Nettosumme:",
+            amountX,
+            y,
+            "Nettobetrag",
             invoice.getSubtotalNet(),
             false
         );
-        state.moveDown(17.0f);
 
-        writeMoneyRow(
-            state,
+        y -= LINE_HEIGHT;
+
+        if (!taxSummaries.isEmpty()) {
+
+            for (
+                TaxSummary taxSummary :
+                taxSummaries.values()
+            ) {
+                String vatLabel =
+                    "MwSt. "
+                        + formatVatRate(
+                        taxSummary.rate()
+                    );
+
+                drawAmountLine(
+                    context.contentStream(),
+                    labelX,
+                    amountX,
+                    y,
+                    vatLabel,
+                    taxSummary.taxAmount(),
+                    false
+                );
+
+                y -= LINE_HEIGHT;
+            }
+
+        } else {
+
+            drawAmountLine(
+                context.contentStream(),
+                labelX,
+                amountX,
+                y,
+                "MwSt.",
+                invoice.getTaxAmount(),
+                false
+            );
+
+            y -= LINE_HEIGHT;
+        }
+
+        /*
+         * Trennlinie nach dem Umsatzsteuerbereich.
+         */
+        float separatorY =
+            y + 5.0f;
+
+        drawLine(
+            context.contentStream(),
             labelX,
-            valueRightX,
-            "Umsatzsteuer:",
-            invoice.getTaxAmount(),
-            false
+            separatorY,
+            amountX,
+            separatorY
         );
-        state.moveDown(12.0f);
 
-        drawLine(state, state.y, 0.8f, 0.55f);
-        state.moveDown(19.0f);
+        /*
+         * Vergrößerter Abstand zwischen
+         * Trennlinie und Gesamtbetrag.
+         */
+        y -= TOTAL_SEPARATOR_BOTTOM_GAP;
 
-        writeMoneyRow(
-            state,
+        drawAmountLine(
+            context.contentStream(),
             labelX,
-            valueRightX,
-            "Gesamtbetrag:",
+            amountX,
+            y,
+            "Gesamtbetrag",
             invoice.getTotalGross(),
             true
         );
-        state.moveDown(30.0f);
+
+        return context.withY(
+            y - 25.0f
+        );
     }
 
-    private void writePaymentInformation(
-        PageState state,
+    private void drawAmountLine(
+        PDPageContentStream contentStream,
+        float labelX,
+        float amountX,
+        float y,
+        String label,
+        BigDecimal amount,
+        boolean bold
+    ) throws IOException {
+
+        PDFont font =
+            bold
+                ? fontBold
+                : fontRegular;
+
+        drawText(
+            contentStream,
+            font,
+            NORMAL_FONT_SIZE,
+            labelX,
+            y,
+            label
+        );
+
+        drawTextRight(
+            contentStream,
+            font,
+            NORMAL_FONT_SIZE,
+            amountX,
+            y,
+            formatMoney(
+                amount
+            )
+        );
+    }
+
+    private Map<BigDecimal, TaxSummary>
+    calculateTaxSummaries(
         InvoiceEntity invoice
-    ) throws IOException {
-        writeText(
-            state.content,
-            state.boldFont,
-            10.0f,
-            LEFT_MARGIN,
-            state.y,
-            "Zahlungsinformationen"
-        );
-        state.moveDown(17.0f);
+    ) {
 
-        writeText(
-            state.content,
-            state.regularFont,
-            NORMAL_FONT_SIZE,
-            LEFT_MARGIN,
-            state.y,
-            "Bitte überweisen Sie den Rechnungsbetrag bis zum "
-                + formatDate(invoice.getDueDate())
-                + "."
-        );
-        state.moveDown(15.0f);
+        Map<BigDecimal, TaxSummary> result =
+            new LinkedHashMap<>();
 
-        writeText(state.content, state.regularFont, NORMAL_FONT_SIZE,
-            LEFT_MARGIN, state.y,
-            "Bank: " + safe(invoice.getBankName()));
-        state.moveDown(14.0f);
-
-        writeText(state.content, state.regularFont, NORMAL_FONT_SIZE,
-            LEFT_MARGIN, state.y,
-            "IBAN: " + safe(invoice.getIban()));
-        state.moveDown(14.0f);
-
-        writeText(state.content, state.regularFont, NORMAL_FONT_SIZE,
-            LEFT_MARGIN, state.y,
-            "BIC: " + safe(invoice.getBic()));
-
-        BigDecimal discountPercent = zeroIfNull(invoice.getDiscountPercent());
-        Integer discountDays = invoice.getDiscountDays();
-
-        if (discountPercent.compareTo(BigDecimal.ZERO) > 0
-            && discountDays != null
-            && discountDays > 0) {
-            state.moveDown(14.0f);
-            writeText(
-                state.content,
-                state.regularFont,
-                NORMAL_FONT_SIZE,
-                LEFT_MARGIN,
-                state.y,
-                formatDecimal(discountPercent)
-                    + " % Skonto bei Zahlung innerhalb von "
-                    + discountDays
-                    + " Tagen."
-            );
+        if (invoice.getItems() == null) {
+            return result;
         }
 
-        state.moveDown(24.0f);
-    }
+        for (
+            InvoiceItemEntity item :
+            invoice.getItems()
+        ) {
+            BigDecimal taxRate =
+                item.getVatRate();
 
-    private PageState writeNotes(
-        PDDocument document,
-        PageState state,
-        InvoiceEntity invoice,
-        PDFont regularFont,
-        PDFont boldFont
-    ) throws IOException {
-        String notes = normalize(invoice.getNotes());
-        if (notes == null) {
-            return state;
-        }
+            BigDecimal lineNet =
+                item.getLineNet();
 
-        List<String> lines = wrapText(
-            notes,
-            regularFont,
-            NORMAL_FONT_SIZE,
-            CONTENT_WIDTH
-        );
+            if (taxRate == null
+                || lineNet == null) {
 
-        float requiredHeaderHeight = 30.0f;
-        if (!hasSpace(state, requiredHeaderHeight)) {
-            state.close();
-            state = openPage(document, regularFont, boldFont);
-            writeContinuationHeader(state, invoice);
-        }
-
-        writeText(
-            state.content,
-            state.boldFont,
-            10.0f,
-            LEFT_MARGIN,
-            state.y,
-            "Anmerkungen"
-        );
-        state.moveDown(17.0f);
-
-        for (String line : lines) {
-            if (!hasSpace(state, 14.0f)) {
-                state.close();
-                state = openPage(document, regularFont, boldFont);
-                writeContinuationHeader(state, invoice);
+                continue;
             }
 
-            writeText(
-                state.content,
-                state.regularFont,
-                NORMAL_FONT_SIZE,
-                LEFT_MARGIN,
-                state.y,
-                line
-            );
-            state.moveDown(13.0f);
+            BigDecimal normalizedRate =
+                taxRate.stripTrailingZeros();
+
+            BigDecimal taxAmount =
+                resolveItemTaxAmount(
+                    item
+                );
+
+            TaxSummary existing =
+                result.get(
+                    normalizedRate
+                );
+
+            if (existing == null) {
+
+                result.put(
+                    normalizedRate,
+                    new TaxSummary(
+                        normalizedRate,
+                        lineNet,
+                        taxAmount
+                    )
+                );
+
+            } else {
+
+                result.put(
+                    normalizedRate,
+                    new TaxSummary(
+                        normalizedRate,
+                        existing.netAmount()
+                            .add(
+                                lineNet
+                            ),
+                        existing.taxAmount()
+                            .add(
+                                taxAmount
+                            )
+                    )
+                );
+            }
         }
 
-        return state;
+        return result;
     }
 
-    private void addPageNumbers(
+    private PdfContext drawPaymentTerms(
         PDDocument document,
-        PDFont font
+        PdfContext context,
+        InvoiceEntity invoice
     ) throws IOException {
-        int pageCount = document.getNumberOfPages();
 
-        for (int index = 0; index < pageCount; index++) {
-            PDPage page = document.getPage(index);
+        List<String> paymentTermLines =
+            createPaymentTermLines(
+                invoice
+            );
 
-            try (PDPageContentStream content = new PDPageContentStream(
+        if (paymentTermLines.isEmpty()) {
+            return context;
+        }
+
+        float requiredHeight =
+            22.0f
+                + paymentTermLines.size()
+                * LINE_HEIGHT;
+
+        context =
+            ensureSpace(
                 document,
-                page,
-                PDPageContentStream.AppendMode.APPEND,
-                true,
-                true
-            )) {
-                String text = "Seite " + (index + 1) + " von " + pageCount;
-                float width = textWidth(font, SMALL_FONT_SIZE, text);
+                context,
+                requiredHeight
+            );
 
-                writeText(
-                    content,
-                    font,
-                    SMALL_FONT_SIZE,
-                    page.getMediaBox().getWidth() - RIGHT_MARGIN - width,
-                    24.0f,
-                    text
+        float y =
+            context.y();
+
+        drawText(
+            context.contentStream(),
+            fontBold,
+            NORMAL_FONT_SIZE,
+            LEFT_MARGIN,
+            y,
+            "Zahlungsbedingungen"
+        );
+
+        y -= LINE_HEIGHT;
+
+        for (
+            String paymentTermLine :
+            paymentTermLines
+        ) {
+            drawText(
+                context.contentStream(),
+                fontRegular,
+                NORMAL_FONT_SIZE,
+                LEFT_MARGIN,
+                y,
+                paymentTermLine
+            );
+
+            y -= LINE_HEIGHT;
+        }
+
+        return context.withY(
+            y - 8.0f
+        );
+    }
+
+    private List<String> createPaymentTermLines(
+        InvoiceEntity invoice
+    ) {
+
+        List<String> lines =
+            new ArrayList<>();
+
+        Integer paymentTermDays =
+            invoice.getPaymentTermDays();
+
+        LocalDate dueDate =
+            invoice.getDueDate();
+
+        if (paymentTermDays != null
+            && paymentTermDays > 0) {
+
+            StringBuilder paymentLine =
+                new StringBuilder();
+
+            paymentLine.append(
+                "Zahlbar innerhalb von "
+            );
+
+            paymentLine.append(
+                paymentTermDays
+            );
+
+            paymentLine.append(
+                paymentTermDays == 1
+                    ? " Tag"
+                    : " Tagen"
+            );
+
+            if (dueDate != null) {
+
+                paymentLine.append(
+                    ", spätestens bis zum "
+                );
+
+                paymentLine.append(
+                    formatDate(
+                        dueDate
+                    )
+                );
+            }
+
+            paymentLine.append(
+                "."
+            );
+
+            lines.add(
+                paymentLine.toString()
+            );
+
+        } else if (dueDate != null) {
+
+            lines.add(
+                "Zahlbar ohne Abzug bis zum "
+                    + formatDate(
+                    dueDate
+                )
+                    + "."
+            );
+
+        } else {
+
+            lines.add(
+                "Zahlbar ohne Abzug."
+            );
+        }
+
+        if (hasDiscount(
+            invoice
+        )) {
+
+            StringBuilder discountLine =
+                new StringBuilder();
+
+            discountLine.append(
+                "Bei Zahlung innerhalb von "
+            );
+
+            discountLine.append(
+                invoice.getDiscountDays()
+            );
+
+            discountLine.append(
+                invoice.getDiscountDays() == 1
+                    ? " Tag"
+                    : " Tagen"
+            );
+
+            discountLine.append(
+                " gewähren wir "
+            );
+
+            discountLine.append(
+                formatPercent(
+                    invoice.getDiscountPercent()
+                )
+            );
+
+            discountLine.append(
+                " % Skonto."
+            );
+
+            lines.add(
+                discountLine.toString()
+            );
+        }
+
+        return lines;
+    }
+
+    private boolean hasDiscount(
+        InvoiceEntity invoice
+    ) {
+
+        return invoice.getDiscountPercent() != null
+            && invoice.getDiscountPercent()
+            .compareTo(
+                BigDecimal.ZERO
+            ) > 0
+            && invoice.getDiscountDays() != null
+            && invoice.getDiscountDays() > 0;
+    }
+
+    private PdfContext drawPaymentInformation(
+        PDDocument document,
+        PdfContext context,
+        InvoiceEntity invoice
+    ) throws IOException {
+
+        context =
+            ensureSpace(
+                document,
+                context,
+                90.0f
+            );
+
+        float y =
+            context.y();
+
+        drawText(
+            context.contentStream(),
+            fontBold,
+            NORMAL_FONT_SIZE,
+            LEFT_MARGIN,
+            y,
+            "Zahlungsinformationen"
+        );
+
+        y -= LINE_HEIGHT;
+
+        if (notBlank(
+            invoice.getBankName()
+        )) {
+
+            y =
+                drawLabelValue(
+                    context.contentStream(),
+                    LEFT_MARGIN,
+                    LEFT_MARGIN + 80.0f,
+                    y,
+                    "Bank:",
+                    invoice.getBankName()
+                );
+        }
+
+        if (notBlank(
+            invoice.getIban()
+        )) {
+
+            y =
+                drawLabelValue(
+                    context.contentStream(),
+                    LEFT_MARGIN,
+                    LEFT_MARGIN + 80.0f,
+                    y,
+                    "IBAN:",
+                    formatIban(
+                        invoice.getIban()
+                    )
+                );
+        }
+
+        if (notBlank(
+            invoice.getBic()
+        )) {
+
+            y =
+                drawLabelValue(
+                    context.contentStream(),
+                    LEFT_MARGIN,
+                    LEFT_MARGIN + 80.0f,
+                    y,
+                    "BIC:",
+                    invoice.getBic()
+                );
+        }
+
+        if (notBlank(
+            invoice.getPaymentReference()
+        )) {
+
+            y =
+                drawLabelValue(
+                    context.contentStream(),
+                    LEFT_MARGIN,
+                    LEFT_MARGIN + 80.0f,
+                    y,
+                    "Verwendung:",
+                    invoice.getPaymentReference()
+                );
+        }
+
+        return context.withY(
+            y - 12.0f
+        );
+    }
+
+    private PdfContext drawNotes(
+        PDDocument document,
+        PdfContext context,
+        InvoiceEntity invoice
+    ) throws IOException {
+
+        if (!notBlank(
+            invoice.getNotes()
+        )) {
+            return context;
+        }
+
+        List<String> noteLines =
+            wrapText(
+                invoice.getNotes(),
+                fontRegular,
+                NORMAL_FONT_SIZE,
+                PAGE_WIDTH
+                    - LEFT_MARGIN
+                    - RIGHT_MARGIN
+            );
+
+        context =
+            ensureSpace(
+                document,
+                context,
+                noteLines.size()
+                    * LINE_HEIGHT
+                    + 10.0f
+            );
+
+        float y =
+            context.y();
+
+        for (String line : noteLines) {
+
+            drawText(
+                context.contentStream(),
+                fontRegular,
+                NORMAL_FONT_SIZE,
+                LEFT_MARGIN,
+                y,
+                line
+            );
+
+            y -= LINE_HEIGHT;
+        }
+
+        return context.withY(
+            y - 12.0f
+        );
+    }
+
+    private List<String> wrapText(
+        String text,
+        PDFont font,
+        float fontSize,
+        float maximumWidth
+    ) throws IOException {
+
+        List<String> lines =
+            new ArrayList<>();
+
+        if (!notBlank(
+            text
+        )) {
+            return lines;
+        }
+
+        String[] words =
+            safe(
+                text
+            ).split(
+                "\\s+"
+            );
+
+        StringBuilder currentLine =
+            new StringBuilder();
+
+        for (String word : words) {
+
+            String candidate =
+                currentLine.isEmpty()
+                    ? word
+                    : currentLine
+                    + " "
+                    + word;
+
+            if (calculateTextWidth(
+                font,
+                fontSize,
+                candidate
+            ) <= maximumWidth) {
+
+                currentLine.setLength(
+                    0
+                );
+
+                currentLine.append(
+                    candidate
+                );
+
+            } else {
+
+                if (!currentLine.isEmpty()) {
+
+                    lines.add(
+                        currentLine.toString()
+                    );
+                }
+
+                currentLine.setLength(
+                    0
+                );
+
+                currentLine.append(
+                    word
+                );
+            }
+        }
+
+        if (!currentLine.isEmpty()) {
+
+            lines.add(
+                currentLine.toString()
+            );
+        }
+
+        return lines;
+    }
+
+    /*
+     * Fügt nach Fertigstellung des Dokuments
+     * auf jeder Seite Rechnungsnummer und Seitenzahl ein.
+     */
+    private void drawFooters(
+        PDDocument document,
+        InvoiceEntity invoice
+    ) throws IOException {
+
+        int totalPages =
+            document.getNumberOfPages();
+
+        for (
+            int pageIndex = 0;
+            pageIndex < totalPages;
+            pageIndex++
+        ) {
+            PDPage page =
+                document.getPage(
+                    pageIndex
+                );
+
+            try (
+                PDPageContentStream contentStream =
+                    new PDPageContentStream(
+                        document,
+                        page,
+                        PDPageContentStream.AppendMode.APPEND,
+                        true,
+                        true
+                    )
+            ) {
+                drawFooter(
+                    contentStream,
+                    invoice,
+                    pageIndex + 1,
+                    totalPages
                 );
             }
         }
     }
 
-    private boolean hasSpace(PageState state, float requiredHeight) {
-        return state.y - requiredHeight >= BOTTOM_MARGIN;
+    private void drawFooter(
+        PDPageContentStream contentStream,
+        InvoiceEntity invoice,
+        int currentPage,
+        int totalPages
+    ) throws IOException {
+
+        float footerY =
+            BOTTOM_MARGIN - 5.0f;
+
+        String invoiceText =
+            "Rechnung "
+                + safe(
+                invoice.getInvoiceNumber()
+            );
+
+        String pageText =
+            "Seite "
+                + currentPage
+                + " von "
+                + totalPages;
+
+        /*
+         * Rechnungsnummer linksbündig.
+         */
+        drawText(
+            contentStream,
+            fontRegular,
+            FOOTER_FONT_SIZE,
+            LEFT_MARGIN,
+            footerY,
+            invoiceText
+        );
+
+        /*
+         * Seitenangabe rechtsbündig.
+         */
+        drawTextRight(
+            contentStream,
+            fontRegular,
+            FOOTER_FONT_SIZE,
+            PAGE_WIDTH - RIGHT_MARGIN,
+            footerY,
+            pageText
+        );
     }
 
-    private void writeLabelValue(
-        PageState state,
+    private PdfContext ensureSpace(
+        PDDocument document,
+        PdfContext context,
+        float requiredHeight
+    ) throws IOException {
+
+        if (context.y()
+            - requiredHeight
+            >= BOTTOM_MARGIN + 20.0f) {
+
+            return context;
+        }
+
+        context.contentStream()
+            .close();
+
+        return createPage(
+            document
+        );
+    }
+
+    private PdfContext createPage(
+        PDDocument document
+    ) throws IOException {
+
+        PDPage page =
+            new PDPage(
+                PDRectangle.A4
+            );
+
+        document.addPage(
+            page
+        );
+
+        PDPageContentStream contentStream =
+            new PDPageContentStream(
+                document,
+                page
+            );
+
+        return new PdfContext(
+            page,
+            contentStream,
+            PAGE_HEIGHT - TOP_MARGIN
+        );
+    }
+
+    private float drawLabelValue(
+        PDPageContentStream contentStream,
         float labelX,
-        float valueRightX,
+        float valueX,
         float y,
         String label,
         String value
     ) throws IOException {
-        writeText(
-            state.content,
-            state.boldFont,
+
+        drawText(
+            contentStream,
+            fontBold,
             SMALL_FONT_SIZE,
             labelX,
             y,
             label
         );
-        writeTextRightAligned(
-            state.content,
-            state.regularFont,
+
+        drawText(
+            contentStream,
+            fontRegular,
             SMALL_FONT_SIZE,
-            valueRightX,
+            valueX,
             y,
-            value
+            safe(
+                value
+            )
         );
+
+        return y - LINE_HEIGHT;
     }
 
-    private void writeMoneyRow(
-        PageState state,
-        float labelX,
-        float valueRightX,
-        String label,
-        BigDecimal value,
-        boolean bold
-    ) throws IOException {
-        PDFont font = bold ? state.boldFont : state.regularFont;
-        float fontSize = bold ? 11.0f : NORMAL_FONT_SIZE;
-
-        writeText(
-            state.content,
-            font,
-            fontSize,
-            labelX,
-            state.y,
-            label
-        );
-        writeTextRightAligned(
-            state.content,
-            font,
-            fontSize,
-            valueRightX,
-            state.y,
-            formatMoney(value) + " EUR"
-        );
-    }
-
-    private void writeOptionalLine(PageState state, String value)
-        throws IOException {
-        String normalized = normalize(value);
-        if (normalized == null) {
-            return;
-        }
-
-        writeText(
-            state.content,
-            state.regularFont,
-            NORMAL_FONT_SIZE,
-            LEFT_MARGIN,
-            state.y,
-            normalized
-        );
-        state.moveDown(13.0f);
-    }
-
-    private void writeText(
-        PDPageContentStream content,
+    private void drawText(
+        PDPageContentStream contentStream,
         PDFont font,
         float fontSize,
         float x,
         float y,
-        String value
+        String text
     ) throws IOException {
-        content.beginText();
-        content.setFont(font, fontSize);
-        content.newLineAtOffset(x, y);
-        content.showText(sanitize(value));
-        content.endText();
+
+        String printableText =
+            sanitizePdfText(
+                text
+            );
+
+        contentStream.beginText();
+
+        contentStream.setFont(
+            font,
+            fontSize
+        );
+
+        contentStream.newLineAtOffset(
+            x,
+            y
+        );
+
+        contentStream.showText(
+            printableText
+        );
+
+        contentStream.endText();
     }
 
-    private void writeTextRightAligned(
-        PDPageContentStream content,
+    private void drawTextRight(
+        PDPageContentStream contentStream,
         PDFont font,
         float fontSize,
         float rightX,
         float y,
-        String value
+        String text
     ) throws IOException {
-        String sanitized = sanitize(value);
-        float width = textWidth(font, fontSize, sanitized);
-        writeText(content, font, fontSize, rightX - width, y, sanitized);
-    }
 
-    private float textWidth(
-        PDFont font,
-        float fontSize,
-        String value
-    ) throws IOException {
-        return font.getStringWidth(sanitize(value)) / 1000.0f * fontSize;
+        String printableText =
+            sanitizePdfText(
+                text
+            );
+
+        float width =
+            font.getStringWidth(
+                printableText
+            )
+                / 1000.0f
+                * fontSize;
+
+        drawText(
+            contentStream,
+            font,
+            fontSize,
+            rightX - width,
+            y,
+            printableText
+        );
     }
 
     private void drawLine(
-        PageState state,
-        float y,
-        float lineWidth,
-        float gray
+        PDPageContentStream contentStream,
+        float x1,
+        float y1,
+        float x2,
+        float y2
     ) throws IOException {
-        state.content.setStrokingColor(gray, gray, gray);
-        state.content.setLineWidth(lineWidth);
-        state.content.moveTo(LEFT_MARGIN, y);
-        state.content.lineTo(LEFT_MARGIN + CONTENT_WIDTH, y);
-        state.content.stroke();
-    }
 
-    private List<String> wrapText(
-        String value,
-        PDFont font,
-        float fontSize,
-        float maximumWidth
-    ) throws IOException {
-        String normalized = normalize(value);
-        if (normalized == null) {
-            return Collections.singletonList("");
-        }
-
-        List<String> lines = new ArrayList<String>();
-        String[] paragraphs = normalized.split("\\R");
-
-        for (String paragraph : paragraphs) {
-            String trimmedParagraph = paragraph.trim();
-            if (trimmedParagraph.isEmpty()) {
-                lines.add("");
-                continue;
-            }
-
-            String[] words = trimmedParagraph.split("\\s+");
-            StringBuilder currentLine = new StringBuilder();
-
-            for (String word : words) {
-                String candidate = currentLine.length() == 0
-                    ? word
-                    : currentLine.toString() + " " + word;
-
-                if (textWidth(font, fontSize, candidate) <= maximumWidth) {
-                    currentLine.setLength(0);
-                    currentLine.append(candidate);
-                } else {
-                    if (currentLine.length() > 0) {
-                        lines.add(currentLine.toString());
-                        currentLine.setLength(0);
-                    }
-
-                    if (textWidth(font, fontSize, word) <= maximumWidth) {
-                        currentLine.append(word);
-                    } else {
-                        splitLongWord(
-                            word,
-                            font,
-                            fontSize,
-                            maximumWidth,
-                            lines,
-                            currentLine
-                        );
-                    }
-                }
-            }
-
-            if (currentLine.length() > 0) {
-                lines.add(currentLine.toString());
-            }
-        }
-
-        return lines.isEmpty() ? Collections.singletonList("") : lines;
-    }
-
-    private void splitLongWord(
-        String word,
-        PDFont font,
-        float fontSize,
-        float maximumWidth,
-        List<String> completedLines,
-        StringBuilder remainder
-    ) throws IOException {
-        StringBuilder part = new StringBuilder();
-
-        for (int index = 0; index < word.length(); index++) {
-            char character = word.charAt(index);
-            String candidate = part.toString() + character;
-
-            if (textWidth(font, fontSize, candidate) <= maximumWidth) {
-                part.append(character);
-            } else {
-                if (part.length() > 0) {
-                    completedLines.add(part.toString());
-                }
-                part.setLength(0);
-                part.append(character);
-            }
-        }
-
-        remainder.append(part);
-    }
-
-    private String buildDescription(InvoiceItemEntity item) {
-        String productNumber = normalize(item.getProductNumber());
-        String description = normalize(item.getDescription());
-
-        if (productNumber == null) {
-            return safe(description);
-        }
-        if (description == null) {
-            return productNumber;
-        }
-        return productNumber + " - " + description;
-    }
-
-    private String invoiceNumber(InvoiceEntity invoice) {
-        String value = normalize(invoice.getInvoiceNumber());
-        return value == null ? "ENTWURF" : value;
-    }
-
-    private String formatDate(LocalDate value) {
-        return value == null ? "" : DATE_FORMAT.format(value);
-    }
-
-    private String formatMoney(BigDecimal value) {
-        NumberFormat formatter = NumberFormat.getNumberInstance(Locale.GERMANY);
-        formatter.setMinimumFractionDigits(2);
-        formatter.setMaximumFractionDigits(2);
-
-        BigDecimal normalized = zeroIfNull(value).setScale(
-            2,
-            RoundingMode.HALF_UP
+        contentStream.moveTo(
+            x1,
+            y1
         );
-        return formatter.format(normalized);
+
+        contentStream.lineTo(
+            x2,
+            y2
+        );
+
+        contentStream.stroke();
     }
 
-    private String formatQuantity(BigDecimal value) {
-        return value == null ? "" : formatDecimal(value);
+    private String formatMoney(
+        BigDecimal value
+    ) {
+
+        BigDecimal safeValue =
+            value == null
+                ? BigDecimal.ZERO
+                : value;
+
+        NumberFormat numberFormat =
+            NumberFormat.getNumberInstance(
+                GERMAN_LOCALE
+            );
+
+        numberFormat.setMinimumFractionDigits(
+            2
+        );
+
+        numberFormat.setMaximumFractionDigits(
+            2
+        );
+
+        return numberFormat.format(
+            safeValue
+        )
+            + " EUR";
     }
 
-    private String formatDecimal(BigDecimal value) {
-        return value.stripTrailingZeros()
-            .toPlainString()
-            .replace('.', ',');
-    }
+    private String formatQuantity(
+        BigDecimal value
+    ) {
 
-    private String joinNonBlank(String first, String second) {
-        String firstValue = normalize(first);
-        String secondValue = normalize(second);
-
-        if (firstValue == null) {
-            return safe(secondValue);
-        }
-        if (secondValue == null) {
-            return firstValue;
-        }
-        return firstValue + " " + secondValue;
-    }
-
-    private String normalize(String value) {
         if (value == null) {
-            return null;
+            return "0";
         }
-        String normalized = value.trim();
-        return normalized.isEmpty() ? null : normalized;
+
+        return value
+            .stripTrailingZeros()
+            .toPlainString()
+            .replace(
+                '.',
+                ','
+            );
     }
 
-    private String safe(String value) {
-        String normalized = normalize(value);
-        return normalized == null ? "" : normalized;
+    private String formatVatRate(
+        BigDecimal vatRate
+    ) {
+
+        if (vatRate == null) {
+            return "";
+        }
+
+        return vatRate
+            .stripTrailingZeros()
+            .toPlainString()
+            .replace(
+                '.',
+                ','
+            )
+            + " %";
     }
 
-    private String sanitize(String value) {
-        return safe(value)
-            .replace("€", "EUR")
-            .replace("–", "-")
-            .replace("—", "-")
-            .replace("„", "\"")
-            .replace("“", "\"")
-            .replace("”", "\"")
-            .replace("’", "'")
-            .replace("…", "...");
+    private String formatPercent(
+        BigDecimal value
+    ) {
+
+        if (value == null) {
+            return "0";
+        }
+
+        return value
+            .stripTrailingZeros()
+            .toPlainString()
+            .replace(
+                '.',
+                ','
+            );
     }
 
-    private BigDecimal zeroIfNull(BigDecimal value) {
-        return value == null ? BigDecimal.ZERO : value;
+    private String formatDate(
+        LocalDate date
+    ) {
+
+        if (date == null) {
+            return "";
+        }
+
+        return date.format(
+            DATE_FORMATTER
+        );
     }
 
-    private static final class PageState {
+    private String formatUnit(
+        String unit
+    ) {
 
-        private final PDPage page;
-        private final PDPageContentStream content;
-        private final PDFont regularFont;
-        private final PDFont boldFont;
-        private float y;
+        if (!notBlank(
+            unit
+        )) {
+            return "";
+        }
 
-        private PageState(
-            PDPage page,
-            PDPageContentStream content,
-            PDFont regularFont,
-            PDFont boldFont,
-            float y
+        String normalized =
+            unit.trim()
+                .toUpperCase(
+                    Locale.ROOT
+                );
+
+        return switch (normalized) {
+
+            case "STD", "HUR" ->
+                "Std.";
+
+            case "STK", "C62" ->
+                "Stk.";
+
+            case "TAG", "DAY" ->
+                "Tage";
+
+            default ->
+                unit.trim();
+        };
+    }
+
+    private String formatIban(
+        String iban
+    ) {
+
+        if (!notBlank(
+            iban
+        )) {
+            return "";
+        }
+
+        String normalized =
+            iban
+                .replaceAll(
+                    "[\\s\\u00A0]+",
+                    ""
+                )
+                .toUpperCase(
+                    Locale.ROOT
+                );
+
+        StringBuilder result =
+            new StringBuilder();
+
+        for (
+            int index = 0;
+            index < normalized.length();
+            index++
         ) {
-            this.page = page;
-            this.content = content;
-            this.regularFont = regularFont;
-            this.boldFont = boldFont;
-            this.y = y;
+
+            if (index > 0
+                && index % 4 == 0) {
+
+                result.append(
+                    ' '
+                );
+            }
+
+            result.append(
+                normalized.charAt(
+                    index
+                )
+            );
         }
 
-        private void moveDown(float distance) {
-            y -= distance;
+        return result.toString();
+    }
+
+    private String joinNonBlank(
+        String first,
+        String second
+    ) {
+
+        if (notBlank(
+            first
+        )
+            && notBlank(
+            second
+        )) {
+
+            return first.trim()
+                + " "
+                + second.trim();
         }
 
-        private void close() throws IOException {
-            content.close();
+        if (notBlank(
+            first
+        )) {
+            return first.trim();
         }
+
+        return safe(
+            second
+        );
+    }
+
+    private boolean notBlank(
+        String value
+    ) {
+
+        return value != null
+            && !value.trim()
+            .isEmpty();
+    }
+
+    private String safe(
+        String value
+    ) {
+
+        return value == null
+            ? ""
+            : value.trim();
+    }
+
+    private String sanitizePdfText(
+        String value
+    ) {
+
+        return safe(
+            value
+        )
+            .replace(
+                "\r",
+                " "
+            )
+            .replace(
+                "\n",
+                " "
+            )
+            .replace(
+                '\u00A0',
+                ' '
+            );
+    }
+
+    private void validateInvoice(
+        InvoiceEntity invoice
+    ) {
+
+        if (invoice == null) {
+
+            throw new IllegalArgumentException(
+                "Die Rechnung darf nicht null sein."
+            );
+        }
+
+        if (!notBlank(
+            invoice.getInvoiceNumber()
+        )) {
+
+            throw new IllegalArgumentException(
+                "Die Rechnungsnummer fehlt."
+            );
+        }
+
+        if (invoice.getCompany() == null) {
+
+            throw new IllegalArgumentException(
+                "Die Firmendaten fehlen."
+            );
+        }
+
+        if (invoice.getItems() == null
+            || invoice.getItems().isEmpty()) {
+
+            throw new IllegalArgumentException(
+                "Die Rechnung enthält keine Positionen."
+            );
+        }
+    }
+
+    private record PdfContext(
+        PDPage page,
+        PDPageContentStream contentStream,
+        float y
+    ) {
+
+        private PdfContext withY(
+            float newY
+        ) {
+
+            return new PdfContext(
+                page,
+                contentStream,
+                newY
+            );
+        }
+    }
+
+    private record TaxSummary(
+        BigDecimal rate,
+        BigDecimal netAmount,
+        BigDecimal taxAmount
+    ) {
+    }
+
+    private record LabelValue(
+        String label,
+        String value
+    ) {
     }
 }
